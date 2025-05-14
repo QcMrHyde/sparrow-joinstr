@@ -20,6 +20,8 @@ import com.sparrowwallet.sparrow.glyphfont.FontAwesome5;
 import com.sparrowwallet.sparrow.io.*;
 import com.sparrowwallet.sparrow.io.bbqr.BBQR;
 import com.sparrowwallet.sparrow.io.bbqr.BBQRType;
+import com.sparrowwallet.sparrow.joinstr.JoinstrController;
+import com.sparrowwallet.sparrow.joinstr.JoinstrForm;
 import com.sparrowwallet.sparrow.net.ElectrumServer;
 import com.sparrowwallet.sparrow.net.ServerType;
 import com.sparrowwallet.sparrow.settings.SettingsGroup;
@@ -543,6 +545,46 @@ public class AppController implements Initializable {
     public void showAbout(ActionEvent event) {
         Stage aboutStage = getAboutStage();
         aboutStage.show();
+    }
+
+    public void showJoinstr(ActionEvent event) {
+        Stage joinstrStage = getJoinstrStage();
+        joinstrStage.show();
+    }
+
+    private Stage getJoinstrStage() {
+        try {
+            FXMLLoader loader = new FXMLLoader(AppController.class.getResource("joinstr/joinstr.fxml"));
+            BorderPane root = loader.load();
+
+            if(OsType.getCurrent() == OsType.WINDOWS) {
+                root.setBorder(new Border(new BorderStroke(Color.DARKGRAY, BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT)));
+            }
+
+            Stage stage = new Stage(StageStyle.DECORATED);
+            stage.setTitle("Joinstr with " + getSelectedWalletForm().getWallet().getFullName());
+            stage.initOwner(tabs.getScene().getWindow());
+
+            JoinstrController controller = loader.getController();
+            JoinstrForm joinstrForm = new JoinstrForm(getSelectedWalletForm().getStorage(), getSelectedWalletForm().getWallet());
+            controller.setJoinstrForm(joinstrForm);
+
+            Scene scene = new Scene(root);
+            AppServices.onEscapePressed(scene, stage::close);
+            stage.setScene(scene);
+            controller.setStage(stage);
+            controller.initializeView();
+            setStageIcon(stage);
+            stage.setOnShowing(event -> {
+                AppServices.moveToActiveWindowScreen(stage, 600, 460);
+            });
+
+            return stage;
+        } catch(IOException e) {
+            log.error("Error loading about stage", e);
+        }
+
+        return null;
     }
 
     private Stage getAboutStage() {
