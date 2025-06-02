@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr;
 
+import com.sparrowwallet.sparrow.io.Config;
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
 import javafx.scene.control.Alert;
@@ -21,6 +22,7 @@ public class NewPoolController extends JoinstrFormController {
     @FXML
     private void handleCreateButton() {
         try {
+
             String denomination = denominationField.getText().trim();
             String peers = peersField.getText().trim();
 
