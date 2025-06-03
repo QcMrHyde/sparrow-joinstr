@@ -58,4 +58,9 @@ open module com.sparrowwallet.sparrow {
     requires com.sparrowwallet.lark;
     requires com.sun.jna;
     requires io.github.doblon8.jzbar;
+    requires nostr.api;
+    requires nostr.base;
+    requires nostr.event;
+    requires nostr.id;
+    requires nostr.util;
 }
