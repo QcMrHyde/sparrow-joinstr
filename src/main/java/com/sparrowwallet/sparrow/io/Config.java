@@ -8,6 +8,7 @@ import com.sparrowwallet.sparrow.Mode;
 import com.sparrowwallet.sparrow.Theme;
 import com.sparrowwallet.sparrow.control.QRDensity;
 import com.sparrowwallet.sparrow.control.WebcamResolution;
+import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.net.*;
 import com.sparrowwallet.sparrow.wallet.FeeRatesSelection;
 import com.sparrowwallet.sparrow.wallet.OptimizationStrategy;
@@ -95,6 +96,7 @@ public class Config {
 
     private String nostrRelay;
 
+    private ArrayList<JoinstrPool> poolStore;
 
     // ================
 
@@ -764,6 +766,16 @@ public class Config {
         flush();
     }
 
+    public ArrayList<JoinstrPool> getPoolStore() {
+        if(poolStore == null)
+            poolStore = new ArrayList<JoinstrPool>();
+        return poolStore;
+    }
+
+    public void setPoolStore(ArrayList<JoinstrPool> pools) {
+        this.poolStore = pools;
+        flush();
+    }
 
     public String getNostrRelay() {
         return nostrRelay;
