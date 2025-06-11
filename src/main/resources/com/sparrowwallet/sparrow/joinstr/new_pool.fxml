@@ -13,7 +13,7 @@
 <?import tornadofx.control.Fieldset?>
 <?import tornadofx.control.Field?>
 
-<BorderPane stylesheets="@joinstr.css, @../wallet/wallet.css, @../general.css" styleClass="send-form" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.sparrowwallet.sparrow.joinstr.NewPoolController">
+<BorderPane stylesheets="@joinstr.css, @../wallet/wallet.css, @../general.css" styleClass="wallet-pane" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.sparrowwallet.sparrow.joinstr.NewPoolController">
     <padding>
         <Insets top="30" right="30" bottom="30" left="30"/>
     </padding>

@@ -119,6 +119,9 @@ public class JoinstrPoolList extends VBox {
         poolData.add(pool);
     }
 
+    public void setSelectedPool(JoinstrPool poolToSelect) {
+        poolTableView.getSelectionModel().select(poolToSelect);
+    }
     public void clearPools() {
         poolData.clear();
     }

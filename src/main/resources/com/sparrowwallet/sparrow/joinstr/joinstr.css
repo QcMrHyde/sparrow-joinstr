@@ -1,12 +1,4 @@
 
-.spacerV50 {
-    -fx-padding:50, 0, 0, 0;
-}
-
-.spacerV25 {
-    -fx-padding:25, 0, 0, 0;
-}
-
 .joinstr-list-action-button {
     -fx-background-color: #3DA0E3;
     -fx-padding:10, 30, 10, 30;
