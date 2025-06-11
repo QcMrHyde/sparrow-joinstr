@@ -33,6 +33,8 @@ public class JoinstrController extends JoinstrFormController {
     @FXML
     private ToggleGroup joinstrMenu;
 
+    private JoinstrPool selectedPool;
+
     public JoinstrController() {
 
     }
@@ -43,40 +45,8 @@ public class JoinstrController extends JoinstrFormController {
                 oldValue.setSelected(true);
                 return;
             }
-
             JoinstrDisplay display = (JoinstrDisplay)selectedToggle.getUserData();
-
-            boolean existing = false;
-            for(Node joinstrDisplay : joinstrPane.getChildren()) {
-                if(joinstrDisplay.getUserData().equals(display)) {
-                    existing = true;
-                    joinstrDisplay.setViewOrder(0);
-                } else {
-                    joinstrDisplay.setViewOrder(1);
-                }
-            }
-
-            try {
-                URL url = AppServices.class.getResource("joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
-                if(url == null) {
-                    throw new IllegalStateException("Cannot find joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
-                }
-                FXMLLoader displayLoader = new FXMLLoader(url);
-                Node joinstrDisplay = displayLoader.load();
-                if(!existing) {
-                    joinstrDisplay.setUserData(display);
-                    joinstrDisplay.setViewOrder(1);
-                    joinstrPane.getChildren().add(joinstrDisplay);
-                }
-                JoinstrFormController controller = displayLoader.getController();
-                JoinstrForm joinstrForm = getJoinstrForm();
-                controller.setJoinstrForm(joinstrForm);
-                controller.initializeView();
-
-            } catch (IOException e) {
-                throw new IllegalStateException("Can't find pane", e);
-            }
-
+            setJoinstrDisplay(display);
         });
 
         for(Toggle toggle : joinstrMenu.getToggles()) {
@@ -95,6 +65,58 @@ public class JoinstrController extends JoinstrFormController {
             }
         } else {
             stage.getScene().getStylesheets().remove(darkCss);
+        }
+
+    }
+
+    public JoinstrPool getSelectedPool() {
+        return this.selectedPool;
+    }
+
+    public void setSelectedPool(JoinstrPool selectedPool) {
+        this.selectedPool = selectedPool;
+    }
+
+    public void setJoinstrDisplay(JoinstrDisplay display) {
+
+        int displayIndex = -1;
+        for(int idx=0;idx<joinstrPane.getChildren().size();idx++) {
+            Node joinstrDisplay = joinstrPane.getChildren().get(idx);
+            if(joinstrDisplay.getUserData().equals(display)) {
+                displayIndex = idx;
+                joinstrDisplay.setViewOrder(0);
+            } else {
+                joinstrDisplay.setViewOrder(1);
+            }
+        }
+
+        try {
+
+            URL url = AppServices.class.getResource("joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
+            if(url == null) {
+                throw new IllegalStateException("Cannot find joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
+            }
+
+            FXMLLoader displayLoader = new FXMLLoader(url);
+            Node joinstrDisplay = displayLoader.load();
+
+            joinstrDisplay.setUserData(display);
+            joinstrDisplay.setViewOrder(1);
+
+            // Remove existing display to refresh data
+            if(displayIndex != -1) {
+                joinstrPane.getChildren().remove(displayIndex);
+            }
+            joinstrPane.getChildren().add(joinstrDisplay);
+
+            JoinstrFormController controller = displayLoader.getController();
+            JoinstrForm joinstrForm = getJoinstrForm();
+            controller.setJoinstrController(this);
+            controller.setJoinstrForm(joinstrForm);
+            controller.initializeView();
+
+        } catch (IOException e) {
+            throw new IllegalStateException("Can't find pane", e);
         }
 
     }

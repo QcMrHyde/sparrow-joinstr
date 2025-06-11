@@ -27,8 +27,6 @@ public class MyPoolsController extends JoinstrFormController {
         try {
             joinstrPoolList = new JoinstrPoolList();
 
-            joinstrPoolList.configureWithJoinButtons();
-
             // Add pool store data
             addPoolStoreData();
 
@@ -39,6 +37,7 @@ public class MyPoolsController extends JoinstrFormController {
 
             joinstrPoolList.setOnPoolSelectedListener(pool -> {
                 if (pool != null) {
+                    getJoinstrController().setSelectedPool(pool);
                     joinstrInfoPane.setVisible(true);
                     joinstrInfoPane.setManaged(true);
                     joinstrInfoPane.updatePoolInfo(pool);
@@ -48,6 +47,10 @@ public class MyPoolsController extends JoinstrFormController {
                 }
             });
 
+            JoinstrPool selectedPool = getJoinstrController().getSelectedPool();
+            if(selectedPool != null) {
+                joinstrPoolList.setSelectedPool(selectedPool);
+            }
             contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane);
 
             searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
@@ -63,12 +66,10 @@ public class MyPoolsController extends JoinstrFormController {
     }
 
     private void addPoolStoreData() {
-
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
         for (JoinstrPool pool: pools) {
             joinstrPoolList.addPool(pool);
         }
-
     }
 
     private void filterPools(String searchText) {

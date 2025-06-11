@@ -1,8 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.google.gson.Gson;
 import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.payjoin.Payjoin;
 
 import java.util.ArrayList;
 
@@ -175,6 +173,9 @@ public class NewPoolController extends JoinstrFormController {
                 alert.setContentText("Pool created successfully!\nEvent ID: " + event.getId() +
                                      "\nDenomination: " + denomination + "\nPeers: " + peers);
                 alert.showAndWait();
+
+                getJoinstrController().setSelectedPool(pool);
+                getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
