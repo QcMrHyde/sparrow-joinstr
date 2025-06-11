@@ -13,43 +13,21 @@
 <?import tornadofx.control.Fieldset?>
 <?import tornadofx.control.Field?>
 
-<BorderPane stylesheets="@joinstr.css, @../wallet/wallet.css, @../general.css" styleClass="send-form" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.sparrowwallet.sparrow.joinstr.NewPoolController">
+<BorderPane stylesheets="@joinstr.css, @../wallet/wallet.css, @../general.css" styleClass="wallet-pane" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.sparrowwallet.sparrow.joinstr.NewPoolController">
     <padding>
         <Insets top="30" right="30" bottom="30" left="30"/>
     </padding>
     <center>
         <VBox maxWidth="Infinity" fx:id="contentVBox" spacing="20">
-                <Label styleClass="sub-title">Create a new pool</Label>
+                <Label styleClass="title">Create a new pool</Label>
                 <Form maxWidth="Infinity" style="-fx-max-width: 600px;">
                     <Fieldset inputGrow="ALWAYS">
-                        <Field text="Pay to:">
-                            <Label fx:id="addressLabel" />
-                        </Field>
-                        <Field text="Label:">
-                            <TextField fx:id="labelField" promptText="Required" style="-fx-max-width: 250px;">
-                                <tooltip>
-                                    <Tooltip text="Required to label the transaction (privately in this wallet)"/>
-                                </tooltip>
-                            </TextField>
-                        </Field>
-                        <Field text="UTXO:">
-                            <ComboBox fx:id="utxosComboBox" styleClass="amount-unit" style="-fx-max-width: 150px;" onAction="#setUtxoAmount" />
-                            <TextField fx:id="amountField" disable="true" style="-fx-max-width: 100px;-fx-text-fill: white;" />
-                        </Field>
                         <Field text="Denomination:" style="-fx-text-fill: #aaaaaa;">
                             <TextField fx:id="denominationField" promptText="Required" style="-fx-max-width: 100px;-fx-background-color: #444444; -fx-text-fill: white; -fx-prompt-text-fill: #888888;">
                                 <tooltip>
                                     <Tooltip text="Required to create coinjoin pool"/>
                                 </tooltip>
                             </TextField>
-                            <ComboBox fx:id="denominationUnit" styleClass="amount-unit" style="-fx-min-width: 60px;" onAction="#handleDenominationUnitChange">
-                                <items>
-                                    <FXCollections fx:factory="observableArrayList">
-                                        <BitcoinUnit fx:constant="BTC" />
-                                        <BitcoinUnit fx:constant="SATOSHIS" />
-                                    </FXCollections>
-                                </items>
-                            </ComboBox>
                         </Field>
                         <Field text="Number of Peers:" style="-fx-text-fill: #aaaaaa;">
                             <TextField fx:id="peersField" promptText="Req." style="-fx-max-width: 50px;-fx-background-color: #444444; -fx-text-fill: white; -fx-prompt-text-fill: #888888;" />

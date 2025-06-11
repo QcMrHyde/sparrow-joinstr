@@ -1,6 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
-import com.sparrowwallet.sparrow.joinstr.OtherPoolsController.JoinstrPool;
+import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -119,6 +119,9 @@ public class JoinstrPoolList extends VBox {
         poolData.add(pool);
     }
 
+    public void setSelectedPool(JoinstrPool poolToSelect) {
+        poolTableView.getSelectionModel().select(poolToSelect);
+    }
     public void clearPools() {
         poolData.clear();
     }
