@@ -1,5 +1,7 @@
 package com.sparrowwallet.sparrow.joinstr;
 
+import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
+
 import com.sparrowwallet.sparrow.io.Config;
 
 import java.util.ArrayList;
@@ -154,8 +156,9 @@ public class NewPoolController extends JoinstrFormController {
                 return;
             }
 
+            GenericEvent event = null;
             try {
-                GenericEvent event = NostrPublisher.publishCustomEvent(denomination, peers);
+                event = NostrPublisher.publishCustomEvent(denomination, peers);
 
                 Alert alert = new Alert(AlertType.INFORMATION);
                 alert.setHeaderText(null);
@@ -166,13 +169,9 @@ public class NewPoolController extends JoinstrFormController {
 
                 // Add pool to pool store in Config
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key,joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
                 pools.add(pool);
                 Config.get().setPoolStore(pools);
-
-                alert.setContentText("Pool created successfully!\nEvent ID: " + event.getId() +
-                                     "\nDenomination: " + denomination + "\nPeers: " + peers);
-                alert.showAndWait();
 
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
@@ -185,6 +184,14 @@ public class NewPoolController extends JoinstrFormController {
             peersField.clear();
             amountField.clear();
             labelField.clear();
+
+            assert event != null;
+            showSuccessDialog(
+                    "New Pool",
+                    "Pool created successfully!\nEvent ID: " + event.getId() +
+                            "\nDenomination: " + denomination +
+                            "\nPeers: " + peers
+            );
 
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
