@@ -4,6 +4,7 @@ import nostr.api.NIP01;
 import nostr.api.NIP04;
 import nostr.event.BaseTag;
 import nostr.event.impl.GenericEvent;
+import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.wallet.Wallet;
@@ -113,6 +114,9 @@ public class NostrPublisher {
 
             NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
             String encryptedContent = nip04.encrypt(poolIdentity, addressContent, poolIdentity.getPublicKey());
+
+            tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
+
             GenericEvent encrypted_event = new GenericEvent(
             poolIdentity.getPublicKey(),
             4,
