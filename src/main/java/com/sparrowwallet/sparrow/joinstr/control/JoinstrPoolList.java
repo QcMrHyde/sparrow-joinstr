@@ -1,6 +1,18 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
+import com.sparrowwallet.sparrow.control.QRDisplayDialog;
+
+import javafx.scene.control.Alert;
+import javafx.scene.control.Label;
+import javafx.scene.control.ProgressIndicator;
+import javafx.scene.layout.HBox;
+import javafx.stage.Modality;
+import nostr.id.Identity;
+import nostr.event.BaseTag;
+import nostr.event.tag.PubKeyTag;
+import nostr.api.NIP04;
+import nostr.event.impl.GenericEvent;
 
 import javafx.collections.FXCollections;
 import javafx.collections.ObservableList;
@@ -12,7 +24,10 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
+import java.util.List;
+import java.util.ArrayList;
 
+import java.util.Map;
 import java.util.function.Consumer;
 
 public class JoinstrPoolList extends VBox {
@@ -95,7 +110,43 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
-                            System.out.println("Join button clicked for pool: " + pool.getPubkey());
+                            Identity identity = Identity.generateRandomIdentity();
+                            String pubkey = identity.getPublicKey().toString();
+                            QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
+                            qrDialog.showAndWait();
+
+                            String requestContent = "{\"type\": \"join_pool\"}";
+                            List<BaseTag> tags = new ArrayList<>();
+                            tags.add(new PubKeyTag(identity.getPublicKey()));
+
+                            NIP04 nip04 = new NIP04(identity, identity.getPublicKey());
+                            String encryptedContent = nip04.encrypt(identity, requestContent, identity.getPublicKey());
+
+                            GenericEvent encrypted_event = new GenericEvent(
+                                    identity.getPublicKey(),
+                                    4,
+                                    tags,
+                                    encryptedContent
+                            );
+
+                            nip04.setEvent(encrypted_event);
+                            nip04.sign();
+                            nip04.send(Map.of("nos", pool.getRelay()));
+
+                            System.out.println("Join request sent. Event ID:: " + encrypted_event.getId());
+
+                            Alert waitingDialog = new Alert(Alert.AlertType.NONE);
+                            waitingDialog.initModality(Modality.APPLICATION_MODAL);
+                            waitingDialog.setTitle("Waiting");
+                            waitingDialog.setHeaderText(null);
+
+                            ProgressIndicator spinner = new ProgressIndicator();
+                            Label waitingLabel = new Label("  Waiting for pool credentials...");
+                            HBox content = new HBox(spinner, waitingLabel);
+                            content.setSpacing(10);
+                            waitingDialog.getDialogPane().setContent(content);
+
+                            waitingDialog.show();
                         });
                     }
 
