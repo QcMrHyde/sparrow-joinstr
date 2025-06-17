@@ -65,7 +65,7 @@ public class OtherPoolsController extends JoinstrFormController {
 
         // Create the two sample pools
         JoinstrPool pool1 = new JoinstrPool(
-                "relay.joinstr.xyz",
+                "wss://relay.joinstr.xyz",
                 "03ab4...e92f",
                 "0.001 BTC",
                 "4/5",
@@ -73,8 +73,8 @@ public class OtherPoolsController extends JoinstrFormController {
         );
 
         JoinstrPool pool2 = new JoinstrPool(
-                "relay.joinstr.xyz",
-                "02c4f...19a3",
+                "wss://nos.lol",
+                "1bd340cb690bf3fd35106b2434230cf23d539d89824efbde1605b61c21fa9543",
                 "0.005 BTC",
                 "3/7",
                 "00:00:00 UTC"
