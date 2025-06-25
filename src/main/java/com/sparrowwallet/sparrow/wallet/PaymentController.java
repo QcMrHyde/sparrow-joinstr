@@ -469,7 +469,7 @@ public class PaymentController extends WalletFormController implements Initializ
         return getRecipientDustThreshold(address);
     }
 
-    private long getRecipientDustThreshold(Address address) {
+    public static long getRecipientDustThreshold(Address address) {
         TransactionOutput txOutput = new TransactionOutput(new Transaction(), 1L, address.getOutputScript());
         return address.getScriptType().getDustThreshold(txOutput, Transaction.DUST_RELAY_TX_FEE);
     }
