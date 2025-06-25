@@ -2,9 +2,15 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
+import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.wallet.Wallet;
+import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
+import com.sparrowwallet.sparrow.io.Storage;
+import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.util.ArrayList;
+import java.util.Map;
 
 import com.sparrowwallet.drongo.BitcoinUnit;
 import com.sparrowwallet.drongo.KeyPurpose;
@@ -127,7 +133,7 @@ public class NewPoolController extends JoinstrFormController {
             String peers = peersField.getText().trim();
 
             if (denomination.isEmpty() || peers.isEmpty()) {
-                showError("Please enter denomination and peers to create a pool.");
+                showError("Please enter denomination and peers to create a pool");
                 return;
             }
 
@@ -137,7 +143,7 @@ public class NewPoolController extends JoinstrFormController {
                     Long.parseLong(denomination);
                 }
                 if (denominationValue <= 0) {
-                    showError("Denomination must be greater than 0");
+                    showError("Denomination must be greater than zero");
                     return;
                 }
             } catch (NumberFormatException e) {
@@ -147,8 +153,8 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 int peersValue = Integer.parseInt(peers);
-                if (peersValue <= 0) {
-                    showError("Number of peers must be greater than 0");
+                if (peersValue <= 2) {
+                    showError("Number of peers must be greater than 2");
                     return;
                 }
             } catch (NumberFormatException e) {
@@ -156,9 +162,32 @@ public class NewPoolController extends JoinstrFormController {
                 return;
             }
 
+            Address bitcoinAddress;
+            try {
+                Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+                if (openWallets.isEmpty()) {
+                    throw new Exception("No wallet found. Please open a wallet in Sparrow first.");
+                }
+
+                Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
+                Wallet wallet = firstWallet.getKey();
+                Storage storage = firstWallet.getValue();
+                bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
+
+                double recipientDustThreshold = (double)PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
+                if(Double.parseDouble(denomination) < recipientDustThreshold) {
+                    throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
+                }
+
+            } catch (Exception e) {
+                showError(e.getMessage());
+                return;
+            }
+
             GenericEvent event = null;
             try {
-                event = NostrPublisher.publishCustomEvent(denomination, peers);
+
+                event = NostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
 
                 Alert alert = new Alert(AlertType.INFORMATION);
                 alert.setHeaderText(null);
