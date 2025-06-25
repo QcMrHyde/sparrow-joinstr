@@ -76,7 +76,7 @@ public class NewPoolController extends JoinstrFormController {
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
                 double recipientDustThreshold = (double)PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
-                if(Double.parseDouble(denomination) < recipientDustThreshold) {
+                if(Double.parseDouble(denomination) <= recipientDustThreshold) {
                     throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
                 }
 
