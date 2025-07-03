@@ -37,17 +37,17 @@ public class NostrPublisher {
     }
 
     public static GenericEvent publishCustomEvent(String denomination, String peers, String bitcoinAddress) {
-        Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
-        if (bitcoinAddress.isEmpty()) {
-            System.err.println("No Bitcoin Address found. Please open a wallet in Sparrow first.");
-            return null;
-        }
-
-        Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-        Wallet wallet = firstWallet.getKey();
-        Storage storage = firstWallet.getValue();
-
         try {
+            Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+            if (bitcoinAddress.isEmpty()) {
+                System.err.println("No Bitcoin Address found. Please open a wallet in Sparrow first.");
+                return null;
+            }
+
+            Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
+            Wallet wallet = firstWallet.getKey();
+            Storage storage = firstWallet.getValue();
+
             System.out.println("Public key: " + SENDER.getPublicKey().toString());
             System.out.println("Private key: " + SENDER.getPrivateKey().toString());
 
