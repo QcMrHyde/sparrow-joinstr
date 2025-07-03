@@ -7,6 +7,7 @@ import nostr.event.impl.GenericEvent;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 import com.sparrowwallet.drongo.KeyPurpose;
+import com.sparrowwallet.drongo.address.Address;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import com.sparrowwallet.sparrow.io.Storage;
@@ -28,26 +29,17 @@ public class NostrPublisher {
             "nos", "wss://nos.lol"
     );
 
-    public static void main(String[] args) {
-        String defaultDenomination = "100000";
-        String defaultPeers = "5";
-        GenericEvent event = publishCustomEvent(defaultDenomination, defaultPeers);
-        if (event != null) {
-            System.out.println("Event ID: " + event.getId());
-        }
-    }
-
-    public static String getNewReceiveAddress(Storage storage, Wallet wallet) {
+    public static Address getNewReceiveAddress(Storage storage, Wallet wallet) {
         WalletForm walletForm = new WalletForm(storage, wallet);
         EventManager.get().register(walletForm);
         NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);
-        return freshEntry.getAddress().toString();
+        return freshEntry.getAddress();
     }
 
-    public static GenericEvent publishCustomEvent(String denomination, String peers) {
+    public static GenericEvent publishCustomEvent(String denomination, String peers, String bitcoinAddress) {
         Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
-        if (openWallets.isEmpty()) {
-            System.err.println("No wallet found. Please open a wallet in Sparrow first.");
+        if (bitcoinAddress.isEmpty()) {
+            System.err.println("No Bitcoin Address found. Please open a wallet in Sparrow first.");
             return null;
         }
 
@@ -55,13 +47,11 @@ public class NostrPublisher {
         Wallet wallet = firstWallet.getKey();
         Storage storage = firstWallet.getValue();
 
-        String bitcoinAddress;
         try {
             System.out.println("Public key: " + SENDER.getPublicKey().toString());
             System.out.println("Private key: " + SENDER.getPrivateKey().toString());
 
             Identity poolIdentity = Identity.generateRandomIdentity();
-            bitcoinAddress = getNewReceiveAddress(storage, wallet);
 
             long timeout = Instant.now().getEpochSecond() + 3600;
 
