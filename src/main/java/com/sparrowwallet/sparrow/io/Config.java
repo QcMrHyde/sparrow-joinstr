@@ -94,7 +94,7 @@ public class Config {
     // Joinstr settings
 
 
-    private String nostrRelay = "wss://nos.lol";
+    private String nostrRelay;
 
     private ArrayList<JoinstrPool> poolStore;
 

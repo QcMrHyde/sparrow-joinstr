@@ -2,11 +2,8 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import com.google.gson.Gson;
 
-import nostr.event.impl.GenericEvent;
-
 public class JoinstrEvent {
 
-    public String nostrEventId;
     public String type;
     public String id;
     public String public_key;
@@ -17,12 +14,10 @@ public class JoinstrEvent {
     public String fee_rate;
     public String transport;
 
-    public JoinstrEvent(GenericEvent nostrEvent) {
-
-        this.nostrEventId = nostrEvent.getId();
+    public JoinstrEvent(String eventContent) {
 
         Gson gson = new Gson();
-        JoinstrEvent joinstrEvent = gson.fromJson(nostrEvent.getContent(), JoinstrEvent.class);
+        JoinstrEvent joinstrEvent = gson.fromJson(eventContent, JoinstrEvent.class);
 
         this.type = joinstrEvent.type;
         this.id = joinstrEvent.id;

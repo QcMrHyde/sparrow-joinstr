@@ -66,17 +66,10 @@ public class MyPoolsController extends JoinstrFormController {
     }
 
     private void addPoolStoreData() {
-
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-
-        NostrWebSocketClient nostrWebSocketClient = new NostrWebSocketClient();
-        nostrWebSocketClient.connect(Config.get().getNostrRelay());
-
         for (JoinstrPool pool: pools) {
-            nostrWebSocketClient.requestPoolsEvent(pool.poolEvent.nostrEventId);
             joinstrPoolList.addPool(pool);
         }
-
     }
 
     private void filterPools(String searchText) {
