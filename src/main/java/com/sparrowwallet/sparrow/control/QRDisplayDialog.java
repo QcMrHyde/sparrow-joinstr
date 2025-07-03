@@ -45,8 +45,8 @@ public class QRDisplayDialog extends Dialog<ButtonType> {
 
     private static final double ANIMATION_PERIOD_MILLIS = 200d;
 
-    private static final int DEFAULT_QR_SIZE = 580;
-    private static final int REDUCED_QR_SIZE = 520;
+    private static final int DEFAULT_QR_SIZE = 300;
+    private static final int REDUCED_QR_SIZE = 250;
 
     private static final BBQREncoding DEFAULT_BBQR_ENCODING = BBQREncoding.ZLIB;
 
