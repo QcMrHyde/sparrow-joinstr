@@ -95,11 +95,11 @@ public class NewPoolController extends JoinstrFormController {
                 assert event != null;
 
                 // Custom class for ease of use
-                JoinstrEvent joinstrEvent = new JoinstrEvent(event);
+                JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
                 // Add pool to pool store in Config
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                JoinstrPool pool = new JoinstrPool(joinstrEvent);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
                 pools.add(pool);
                 Config.get().setPoolStore(pools);
 
