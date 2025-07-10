@@ -129,16 +129,7 @@ public class NewPoolController extends JoinstrFormController {
         }
     }
 
-    public static void shareCredentials(Identity poolIdentity, String relayUrl){
-        Map<String, String> poolCredentials = new HashMap<>();
-        poolCredentials.put("id", "pool_id_here");
-        poolCredentials.put("public_key", "pool_pubkey_here");
-        poolCredentials.put("denomination", "0.1");
-        poolCredentials.put("peers", "5");
-        poolCredentials.put("timeout", String.valueOf(System.currentTimeMillis() / 1000 + 3600));
-        poolCredentials.put("relay", "wss://nos.lol");
-        poolCredentials.put("private_key", "pool_privkey_here");
-        poolCredentials.put("fee_rate", "1");
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials){
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 
