@@ -129,10 +129,9 @@ public class UtxoCircleDialog extends Dialog<Void> {
         private void updateVisualState() {
             if (selected) {
                 // Selected state - solid bright green with yellow outline
-                circle.setFill(Color.LIMEGREEN);
-                circle.setStroke(Color.GOLD);
+                circle.setFill(Color.web("#2596be"));
                 circle.setStrokeWidth(3);
-                text.setFill(Color.BLACK);
+                text.setFill(Color.WHITE);
 
                 ScaleTransition scale = new ScaleTransition(Duration.millis(200), container);
                 scale.setToX(1.2);
