@@ -114,7 +114,6 @@ public class NewPoolController extends JoinstrFormController {
             }
 
             Address bitcoinAddress;
-            Wallet wallet;
             try {
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
                 if (openWallets.isEmpty()) {
@@ -122,7 +121,7 @@ public class NewPoolController extends JoinstrFormController {
                 }
 
                 Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                wallet = firstWallet.getKey();
+                Wallet wallet = firstWallet.getKey();
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
@@ -145,10 +144,8 @@ public class NewPoolController extends JoinstrFormController {
                 alert.setHeaderText(null);
                 assert event != null;
 
-                // Custom class for ease of use
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
-                // Add pool to pool store in Config
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
                 JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
                 pools.add(pool);
@@ -228,7 +225,6 @@ public class NewPoolController extends JoinstrFormController {
     }
 
     public static void shareCredentials(Identity poolIdentity, String relayUrl){
-        // Create pool credentials map
         Map<String, String> poolCredentials = new HashMap<>();
         poolCredentials.put("id", "pool_id_here");
         poolCredentials.put("public_key", "pool_pubkey_here");
@@ -239,12 +235,9 @@ public class NewPoolController extends JoinstrFormController {
         poolCredentials.put("private_key", "pool_privkey_here");
         poolCredentials.put("fee_rate", "1");
 
-// Create listener with pool credentials
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 
-// Start listening - it will automatically respond to join requests
         listener.startListening(decryptedMessage -> {
-            // Handle other message types if needed
             logger.info("Received message: " + decryptedMessage);
         });
     }
