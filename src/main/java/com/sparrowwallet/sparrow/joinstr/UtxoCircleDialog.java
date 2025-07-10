@@ -272,7 +272,7 @@ public class UtxoCircleDialog extends Dialog<Void> {
         dialogPane.getButtonTypes().addAll(registerButtonType, ButtonType.CANCEL);
 
         // Set dialog properties
-        setTitle("UTXO Selection - Interactive Bubble View");
+        setTitle("UTXO Selection");
         dialogPane.setPrefSize(850, 700);
         setResizable(true);
 
