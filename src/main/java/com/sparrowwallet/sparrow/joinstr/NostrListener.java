@@ -74,7 +74,6 @@ public class NostrListener {
 
     private void handleEventMessage(String message) {
         try {
-            // Parse the event JSON
             int startIndex = message.indexOf("{");
             int endIndex = message.lastIndexOf("}") + 1;
             String eventJson = message.substring(startIndex, endIndex);
@@ -82,7 +81,6 @@ public class NostrListener {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode event = mapper.readTree(eventJson);
 
-            // Extract event details
             String encryptedContent = event.get("content").asText();
             String senderPubkey = event.get("pubkey").asText();
             long timestamp = event.get("created_at").asLong();
@@ -91,19 +89,16 @@ public class NostrListener {
             logger.info("Time: " + new Date(timestamp * 1000));
 
             try {
-                // Decrypt the message
                 String decryptedContent = NIP04.decrypt(
                         identity,
                         encryptedContent,
                         new PublicKey(senderPubkey)
                 );
 
-                // Check if it's a join request
                 if (decryptedContent.contains("\"type\": \"join_pool\"")) {
                     handleJoinRequest(senderPubkey);
                 }
 
-                // Handle the decrypted message with general handler if present
                 if (messageHandler != null) {
                     messageHandler.accept(decryptedContent);
                 }
@@ -119,7 +114,6 @@ public class NostrListener {
 
     private void handleJoinRequest(String requesterPubkey) {
         try {
-            // Create the credentials response
             String credentialsJson = String.format(
                     "{\n" +
                             "  \"id\": \"%s\",\n" +
@@ -141,11 +135,9 @@ public class NostrListener {
                     poolCredentials.get("fee_rate")
             );
 
-            // Create tags for the encrypted message
             List<BaseTag> tags = new ArrayList<>();
             tags.add(new PubKeyTag(new PublicKey(requesterPubkey)));
 
-            // Encrypt the credentials for the requester
             NIP04 nip04 = new NIP04(identity, new PublicKey(requesterPubkey));
             String encryptedCredentials = nip04.encrypt(
                     identity,
@@ -153,7 +145,6 @@ public class NostrListener {
                     new PublicKey(requesterPubkey)
             );
 
-            // Create and send the encrypted event
             GenericEvent credentialsEvent = new GenericEvent(
                     identity.getPublicKey(),
                     Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
@@ -173,23 +164,19 @@ public class NostrListener {
 
     private void connectAndSubscribe() {
         try {
-            // Set up client with context
             client = Client.getInstance();
             DefaultRequestContext context = new DefaultRequestContext();
             context.setPrivateKey(identity.getPrivateKey().getRawData());
             context.setRelays(Map.of("default", relay));
 
-            // Create filters for encrypted direct messages
             Filters filters = Filters.builder()
                     .kinds(List.of(Kind.ENCRYPTED_DIRECT_MESSAGE))
                     .referencePubKeys(List.of(identity.getPublicKey()))
                     .build();
 
-            // Create subscription
             String subId = "joinstr-" + System.currentTimeMillis();
             ReqMessage reqMessage = new ReqMessage(subId, filters);
 
-            // Connect and send subscription
             client.connect(context);
             client.send(reqMessage);
 
@@ -216,10 +203,8 @@ public class NostrListener {
             }
         };
 
-        // Start listening with our handler
         startListening(handler);
 
-        // Set up timeout
         CompletableFuture.delayedExecutor(timeoutMillis, TimeUnit.MILLISECONDS).execute(() -> {
             if (!future.isDone()) {
                 future.completeExceptionally(new TimeoutException("No join request received within timeout"));
