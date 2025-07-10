@@ -127,11 +127,6 @@ public class NewPoolController extends JoinstrFormController {
                             "\nPeers: " + peers
             );
 
-            // NostrListener.getAndPrintEvents();
-
-            //UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
-            //dialog.showAndWait();
-
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
         }
