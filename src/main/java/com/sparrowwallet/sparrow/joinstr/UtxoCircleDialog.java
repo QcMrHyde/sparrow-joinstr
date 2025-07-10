@@ -85,16 +85,26 @@ public class UtxoCircleDialog extends Dialog<Void> {
         private void setupInteractions() {
             // Click to select/deselect
             container.setOnMouseClicked(e -> {
-                selected = !selected;
-
+                // If already selected, deselect it
                 if (selected) {
-                    dialog.selectedBubbles.add(this);
-                } else {
+                    selected = false;
                     dialog.selectedBubbles.remove(this);
+                } else {
+                    // Deselect all other bubbles
+                    for (UtxoBubble bubble : dialog.bubbles) {
+                        bubble.selected = false;
+                        bubble.updateVisualState();
+                    }
+                    dialog.selectedBubbles.clear();
+
+                    // Select this one
+                    selected = true;
+                    dialog.selectedBubbles.add(this);
                 }
 
                 updateVisualState();
             });
+
 
             // Hover effects
             container.setOnMouseEntered(e -> {
