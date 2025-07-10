@@ -12,7 +12,9 @@ import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import com.sparrowwallet.drongo.BitcoinUnit;
 import com.sparrowwallet.drongo.KeyPurpose;
@@ -59,76 +61,23 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 
 import nostr.event.impl.GenericEvent;
+import nostr.id.Identity;
 
 public class NewPoolController extends JoinstrFormController {
 
-    @FXML
-    private Label addressLabel;
-
-    @FXML
-    private TextField labelField;
-
-    @FXML
-    private TextField amountField;
-
+    private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
     @FXML
     private TextField denominationField;
 
     @FXML
     private TextField peersField;
 
-    @FXML
-    private ComboBox<BlockTransactionHashIndex> utxosComboBox;
-
-    @FXML
-    private ComboBox<BitcoinUnit> denominationUnit;
-
-    private Address coinjoinAddress;
-
     @Override
     public void initializeView() {
-
-        coinjoinAddress = getNewReceiveAddress();
-        addressLabel.setText(coinjoinAddress.getAddress());
-
-        ObservableList<BlockTransactionHashIndex> utxos = FXCollections.observableArrayList(getWalletForm().getWallet().getWalletTxos().keySet().stream().filter(ref -> !ref.isSpent()).collect(Collectors.toList()));
-        if(!utxos.isEmpty()) {
-            utxosComboBox.setItems(utxos);
-        }
-        utxosComboBox.setPromptText("Select an UTXO");
-        denominationUnit.setValue(BitcoinUnit.SATOSHIS);
-
     }
 
     @FXML
-    private void setUtxoAmount(ActionEvent event) {
-        switch(denominationUnit.getValue()) {
-            case BTC -> {
-                amountField.setText((utxosComboBox.getValue().getValue()) + " BTC");
-            }
-            case SATOSHIS -> {
-                amountField.setText((utxosComboBox.getValue().getValue()) + " sats");
-            }
-        }
-    }
-
-    @FXML
-    private void handleDenominationUnitChange(ActionEvent event) {
-        switch(denominationUnit.getValue()) {
-            case BTC -> {
-                if(!amountField.getText().isEmpty()) {
-                    amountField.setText((Double.parseDouble(amountField.getText().split(" ")[0]) / 100000000) + " BTC");
-                }
-            }
-            case SATOSHIS -> {
-                double amount = Double.parseDouble(amountField.getText().split(" ")[0]) * 100000000;
-                amountField.setText(String.valueOf(amount).split("\\.")[0] + " sats");
-            }
-        }
-    }
-
-    @FXML
-    private void handleCreateButton(ActionEvent event) {
+    private void handleCreateButton() {
         try {
 
             String denomination = denominationField.getText().trim();
@@ -214,8 +163,6 @@ public class NewPoolController extends JoinstrFormController {
 
             denominationField.clear();
             peersField.clear();
-            amountField.clear();
-            labelField.clear();
 
             assert event != null;
             showSuccessDialog(
@@ -280,6 +227,27 @@ public class NewPoolController extends JoinstrFormController {
         return address.getScriptType().getDustThreshold(txOutput, Transaction.DUST_RELAY_TX_FEE);
     }
 
+    public static void shareCredentials(Identity poolIdentity, String relayUrl){
+        // Create pool credentials map
+        Map<String, String> poolCredentials = new HashMap<>();
+        poolCredentials.put("id", "pool_id_here");
+        poolCredentials.put("public_key", "pool_pubkey_here");
+        poolCredentials.put("denomination", "0.1");
+        poolCredentials.put("peers", "5");
+        poolCredentials.put("timeout", String.valueOf(System.currentTimeMillis() / 1000 + 3600));
+        poolCredentials.put("relay", "wss://nos.lol");
+        poolCredentials.put("private_key", "pool_privkey_here");
+        poolCredentials.put("fee_rate", "1");
+
+// Create listener with pool credentials
+        NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
+
+// Start listening - it will automatically respond to join requests
+        listener.startListening(decryptedMessage -> {
+            // Handle other message types if needed
+            logger.info("Received message: " + decryptedMessage);
+        });
+    }
     private void showError(String message) {
         Alert alert = new Alert(AlertType.ERROR);
         alert.setTitle("Error");

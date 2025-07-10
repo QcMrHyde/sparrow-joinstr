@@ -17,6 +17,7 @@ import com.sparrowwallet.sparrow.AppServices;
 
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -122,6 +123,18 @@ public class NostrPublisher {
                 System.out.println("Event ID: " + encrypted_event.getId());
                 System.out.println("Event: " + encrypted_event.toString());
             }
+
+            Map<String, String> poolCredentials = new HashMap<>();
+            poolCredentials.put("id", poolId);
+            poolCredentials.put("public_key", poolIdentity.getPublicKey().toString());
+            poolCredentials.put("denomination", denomination);
+            poolCredentials.put("peers", peers);
+            poolCredentials.put("timeout", String.valueOf(timeout));
+            poolCredentials.put("relay", RELAYS.values().iterator().next());
+            poolCredentials.put("private_key", poolIdentity.getPrivateKey().toString());
+            poolCredentials.put("fee_rate", "1");
+
+            NewPoolController.shareCredentials(poolIdentity, RELAYS.toString());
 
             return event;
 
