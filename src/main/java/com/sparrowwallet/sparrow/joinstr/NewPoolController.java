@@ -10,7 +10,9 @@ import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
@@ -18,8 +20,11 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 
 import nostr.event.impl.GenericEvent;
+import nostr.id.Identity;
 
 public class NewPoolController extends JoinstrFormController {
+
+    private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
     @FXML
     private TextField denominationField;
 
@@ -64,6 +69,7 @@ public class NewPoolController extends JoinstrFormController {
             }
 
             Address bitcoinAddress;
+            Wallet wallet;
             try {
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
                 if (openWallets.isEmpty()) {
@@ -71,12 +77,12 @@ public class NewPoolController extends JoinstrFormController {
                 }
 
                 Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                Wallet wallet = firstWallet.getKey();
+                wallet = firstWallet.getKey();
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
-                double recipientDustThreshold = (double)PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
-                if(Double.parseDouble(denomination) <= recipientDustThreshold) {
+                double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
+                if (Double.parseDouble(denomination) <= recipientDustThreshold) {
                     throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
                 }
 
@@ -121,11 +127,37 @@ public class NewPoolController extends JoinstrFormController {
                             "\nPeers: " + peers
             );
 
+            // NostrListener.getAndPrintEvents();
+
+            //UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            //dialog.showAndWait();
+
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
         }
     }
 
+    public static void shareCredentials(Identity poolIdentity, String relayUrl){
+        // Create pool credentials map
+        Map<String, String> poolCredentials = new HashMap<>();
+        poolCredentials.put("id", "pool_id_here");
+        poolCredentials.put("public_key", "pool_pubkey_here");
+        poolCredentials.put("denomination", "0.1");
+        poolCredentials.put("peers", "5");
+        poolCredentials.put("timeout", String.valueOf(System.currentTimeMillis() / 1000 + 3600));
+        poolCredentials.put("relay", "wss://nos.lol");
+        poolCredentials.put("private_key", "pool_privkey_here");
+        poolCredentials.put("fee_rate", "1");
+
+// Create listener with pool credentials
+        NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
+
+// Start listening - it will automatically respond to join requests
+        listener.startListening(decryptedMessage -> {
+            // Handle other message types if needed
+            logger.info("Received message: " + decryptedMessage);
+        });
+    }
     private void showError(String message) {
         Alert alert = new Alert(AlertType.ERROR);
         alert.setTitle("Error");
