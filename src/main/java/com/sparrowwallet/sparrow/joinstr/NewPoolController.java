@@ -184,56 +184,7 @@ public class NewPoolController extends JoinstrFormController {
         }
     }
 
-    private PSBT createPSBT(String paymentLabel, long amount, long denomination) throws InsufficientFundsException {
-
-        //  PSBT from WalletTransaction
-        double feeRate = 1.0;
-        double longTermFeeRate = 10.0;
-        long fee = 10L;
-        long dustThreshold = getRecipientDustThreshold(coinjoinAddress);
-        long satsLeft = amount;
-
-        ArrayList<Payment> payments = new ArrayList<Payment>();
-        while(satsLeft == denomination || satsLeft > denomination + dustThreshold) {
-            Payment payment = new Payment(coinjoinAddress, paymentLabel, denomination, false);
-            satsLeft -= denomination;
-            payment.setType(Payment.Type.COINJOIN);
-            payments.add(payment);
-        }
-
-        long noInputsFee = getWalletForm().getWallet().getNoInputsFee(payments, feeRate);
-        long costOfChange = getWalletForm().getWallet().getCostOfChange(feeRate, longTermFeeRate);
-        List<UtxoSelector> selectors = new ArrayList<>(List.of(new BnBUtxoSelector(noInputsFee, costOfChange), new KnapsackUtxoSelector(noInputsFee)));
-
-        SpentTxoFilter spentTxoFilter = new SpentTxoFilter(null);
-        List<TxoFilter> txoFilters = List.of(spentTxoFilter, new FrozenTxoFilter(), new CoinbaseTxoFilter(getWalletForm().getWallet()));
-
-        ArrayList<byte[]> opReturns = new ArrayList<>();
-        TreeSet<WalletNode> excludedChangeNodes = new TreeSet<>();
-
-        Integer currentBlockHeight = AppServices.getCurrentBlockHeight();
-        boolean groupByAddress = false;
-        boolean includeMempoolOutputs = false;
-
-        WalletTransaction walletTransaction = getWalletForm().getWallet().createWalletTransaction(selectors, txoFilters, payments, opReturns, excludedChangeNodes, feeRate, longTermFeeRate, fee, currentBlockHeight, groupByAddress, includeMempoolOutputs);
-        return walletTransaction.createPSBT();
-    }
-
-    private long getRecipientDustThreshold(Address address) {
-        TransactionOutput txOutput = new TransactionOutput(new Transaction(), 1L, address.getOutputScript());
-        return address.getScriptType().getDustThreshold(txOutput, Transaction.DUST_RELAY_TX_FEE);
-    }
-
-    public static void shareCredentials(Identity poolIdentity, String relayUrl){
-        Map<String, String> poolCredentials = new HashMap<>();
-        poolCredentials.put("id", "pool_id_here");
-        poolCredentials.put("public_key", "pool_pubkey_here");
-        poolCredentials.put("denomination", "0.1");
-        poolCredentials.put("peers", "5");
-        poolCredentials.put("timeout", String.valueOf(System.currentTimeMillis() / 1000 + 3600));
-        poolCredentials.put("relay", "wss://nos.lol");
-        poolCredentials.put("private_key", "pool_privkey_here");
-        poolCredentials.put("fee_rate", "1");
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials){
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 

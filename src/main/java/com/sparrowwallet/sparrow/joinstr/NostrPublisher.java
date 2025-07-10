@@ -134,7 +134,7 @@ public class NostrPublisher {
             poolCredentials.put("private_key", poolIdentity.getPrivateKey().toString());
             poolCredentials.put("fee_rate", "1");
 
-            NewPoolController.shareCredentials(poolIdentity, RELAYS.toString());
+            NewPoolController.shareCredentials(poolIdentity, RELAYS.toString(), poolCredentials);
 
             return event;
 
