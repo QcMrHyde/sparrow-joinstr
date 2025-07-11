@@ -59,17 +59,14 @@ public class UtxoCircleDialog extends Dialog<Void> {
             this.amount = utxo.getValue();
             this.dialog = dialog;
 
-            // Random initial position
             this.x = ThreadLocalRandom.current().nextDouble(radius, canvasWidth - radius);
             this.y = ThreadLocalRandom.current().nextDouble(radius, canvasHeight - radius);
             this.vx = ThreadLocalRandom.current().nextDouble(-2, 2);
             this.vy = ThreadLocalRandom.current().nextDouble(-2, 2);
 
-            // Create visual elements
             this.circle = new Circle(radius);
             this.container = new StackPane();
 
-            // Create amount text
             String amountBtc = String.format("%.4f", amount / 100000000.0);
             this.text = new Text(amountBtc);
             this.text.setFont(Font.font("Arial", FontWeight.BOLD, Math.max(8, radius / 4)));
@@ -77,27 +74,22 @@ public class UtxoCircleDialog extends Dialog<Void> {
 
             this.container.getChildren().addAll(circle, text);
 
-            // Set initial visual state
             updateVisualState();
             setupInteractions();
         }
 
         private void setupInteractions() {
-            // Click to select/deselect
             container.setOnMouseClicked(e -> {
-                // If already selected, deselect it
                 if (selected) {
                     selected = false;
                     dialog.selectedBubbles.remove(this);
                 } else {
-                    // Deselect all other bubbles
                     for (UtxoBubble bubble : dialog.bubbles) {
                         bubble.selected = false;
                         bubble.updateVisualState();
                     }
                     dialog.selectedBubbles.clear();
 
-                    // Select this one
                     selected = true;
                     dialog.selectedBubbles.add(this);
                 }
@@ -106,7 +98,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
             });
 
 
-            // Hover effects
             container.setOnMouseEntered(e -> {
                 if (!selected) {
                     circle.setStrokeWidth(3);
@@ -127,7 +118,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
                 }
             });
 
-            // Tooltip
             Tooltip tooltip = new Tooltip(
                     String.format("Amount: %.8f BTC (%,d sats)\nTXID: %s\nVOUT: %d",
                             amount / 100000000.0, amount, utxo.getHash(), utxo.getIndex())
@@ -138,7 +128,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
 
         private void updateVisualState() {
             if (selected) {
-                // Selected state - solid bright green with yellow outline
                 circle.setFill(Color.web("#2596be"));
                 circle.setStrokeWidth(3);
                 text.setFill(Color.WHITE);
@@ -148,7 +137,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
                 scale.setToY(1.2);
                 scale.play();
             } else {
-                // Unselected state - transparent gradient
                 RadialGradient gradient = new RadialGradient(
                         0, 0, 0.5, 0.5, 0.8, true, CycleMethod.NO_CYCLE,
                         new Stop(0, Color.WHITE.deriveColor(0, 1, 1, 0.1)),
@@ -168,14 +156,12 @@ public class UtxoCircleDialog extends Dialog<Void> {
         }
 
         void updatePosition(double canvasWidth, double canvasHeight) {
-            // Apply forces and update position
             vx *= DAMPING;
             vy *= DAMPING;
 
             x += vx;
             y += vy;
 
-            // Boundary collision
             if (x - radius < 0) {
                 x = radius;
                 vx = Math.abs(vx);
@@ -192,7 +178,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
                 vy = -Math.abs(vy);
             }
 
-            // Update visual position
             container.setLayoutX(x - radius);
             container.setLayoutY(y - radius);
         }
@@ -222,17 +207,14 @@ public class UtxoCircleDialog extends Dialog<Void> {
         dialogPane.getStylesheets().add(AppServices.class.getResource("general.css").toExternalForm());
         AppServices.setStageIcon(dialogPane.getScene().getWindow());
 
-        // Create canvas
         canvas = new Pane();
         double canvasWidth = 800;
         double canvasHeight = 600;
         canvas.setPrefSize(canvasWidth, canvasHeight);
 
-        // Get UTXOs and create bubbles
         Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
 
         if (!utxos.isEmpty()) {
-            // Calculate radius scaling
             long minAmount = utxos.keySet().stream().mapToLong(BlockTransactionHashIndex::getValue).min().orElse(0);
             long maxAmount = utxos.keySet().stream().mapToLong(BlockTransactionHashIndex::getValue).max().orElse(0);
 
@@ -248,18 +230,15 @@ public class UtxoCircleDialog extends Dialog<Void> {
             }
         }
 
-        // Physics animation
         physics = new AnimationTimer() {
             @Override
             public void handle(long now) {
-                // Apply repulsion between bubbles
                 for (int i = 0; i < bubbles.size(); i++) {
                     for (int j = i + 1; j < bubbles.size(); j++) {
                         bubbles.get(i).applyRepulsion(bubbles.get(j));
                     }
                 }
 
-                // Update positions
                 for (UtxoBubble bubble : bubbles) {
                     bubble.updatePosition(canvasWidth, canvasHeight);
                 }
@@ -267,7 +246,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
         };
         physics.start();
 
-        // Wrap in scroll pane
         ScrollPane scrollPane = new ScrollPane(canvas);
         scrollPane.setFitToWidth(true);
         scrollPane.setFitToHeight(true);
@@ -277,19 +255,15 @@ public class UtxoCircleDialog extends Dialog<Void> {
 
         dialogPane.setContent(scrollPane);
 
-        // Dialog buttons - only Register and Cancel
         ButtonType registerButtonType = new ButtonType("Register", ButtonBar.ButtonData.OK_DONE);
         dialogPane.getButtonTypes().addAll(registerButtonType, ButtonType.CANCEL);
 
-        // Set dialog properties
         setTitle("UTXO Selection");
         dialogPane.setPrefSize(850, 700);
         setResizable(true);
 
-        // Cleanup on close
         setOnCloseRequest(e -> physics.stop());
 
-        // Center dialog
         AppServices.moveToActiveWindowScreen(this);
     }
 
@@ -298,7 +272,6 @@ public class UtxoCircleDialog extends Dialog<Void> {
             return (MIN_RADIUS + MAX_RADIUS) / 2;
         }
 
-        // Square root scaling for better visual distribution
         double normalized = Math.sqrt((double)(amount - minAmount) / (maxAmount - minAmount));
         return MIN_RADIUS + (MAX_RADIUS - MIN_RADIUS) * normalized;
     }
