@@ -3,7 +3,9 @@ package com.sparrowwallet.sparrow.joinstr;
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
 import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
+import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
@@ -64,6 +66,7 @@ public class NewPoolController extends JoinstrFormController {
             }
 
             Address bitcoinAddress;
+            Wallet wallet;
             try {
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
                 if (openWallets.isEmpty()) {
@@ -71,12 +74,12 @@ public class NewPoolController extends JoinstrFormController {
                 }
 
                 Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                Wallet wallet = firstWallet.getKey();
+                wallet = firstWallet.getKey();
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
-                double recipientDustThreshold = (double)PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
-                if(Double.parseDouble(denomination) <= recipientDustThreshold) {
+                double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
+                if (Double.parseDouble(denomination) <= recipientDustThreshold) {
                     throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
                 }
 
@@ -120,6 +123,16 @@ public class NewPoolController extends JoinstrFormController {
                             "\nDenomination: " + denomination +
                             "\nPeers: " + peers
             );
+
+            Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
+
+            for (Map.Entry<BlockTransactionHashIndex, WalletNode> entry : utxos.entrySet()) {
+                BlockTransactionHashIndex utxo = entry.getKey();
+                WalletNode node = entry.getValue();
+            }
+
+            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            dialog.showAndWait();
 
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
