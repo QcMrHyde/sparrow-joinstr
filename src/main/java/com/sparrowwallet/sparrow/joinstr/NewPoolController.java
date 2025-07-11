@@ -10,7 +10,9 @@ import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
@@ -18,8 +20,11 @@ import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 
 import nostr.event.impl.GenericEvent;
+import nostr.id.Identity;
 
 public class NewPoolController extends JoinstrFormController {
+
+    private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
     @FXML
     private TextField denominationField;
 
@@ -75,8 +80,8 @@ public class NewPoolController extends JoinstrFormController {
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
-                double recipientDustThreshold = (double)PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
-                if(Double.parseDouble(denomination) <= recipientDustThreshold) {
+                double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
+                if (Double.parseDouble(denomination) <= recipientDustThreshold) {
                     throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
                 }
 
@@ -94,10 +99,8 @@ public class NewPoolController extends JoinstrFormController {
                 alert.setHeaderText(null);
                 assert event != null;
 
-                // Custom class for ease of use
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
-                // Add pool to pool store in Config
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
                 JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
                 pools.add(pool);
@@ -126,6 +129,14 @@ public class NewPoolController extends JoinstrFormController {
         }
     }
 
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials){
+
+        NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
+
+        listener.startListening(decryptedMessage -> {
+            logger.info("Received message: " + decryptedMessage);
+        });
+    }
     private void showError(String message) {
         Alert alert = new Alert(AlertType.ERROR);
         alert.setTitle("Error");

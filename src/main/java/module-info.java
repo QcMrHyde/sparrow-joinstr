@@ -61,4 +61,8 @@ open module com.sparrowwallet.sparrow {
     requires nostr.event;
     requires nostr.id;
     requires nostr.util;
+    requires nostr.client;
+    requires nostr.command.handler;
+    requires nostr.context;
+    requires nostr.context.impl;
 }
