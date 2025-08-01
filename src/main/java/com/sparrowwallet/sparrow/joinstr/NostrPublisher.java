@@ -26,6 +26,12 @@ public class NostrPublisher {
 
     private static final Identity SENDER = Identity.generateRandomIdentity();
 
+    private static Identity poolIdentity = null;
+
+    public static String getPoolPrivateKey() {
+        return poolIdentity.getPrivateKey().toString();
+    }
+
     private static final Map<String, String> RELAYS = Map.of(
             "nos", "wss://nos.lol"
     );
@@ -52,7 +58,7 @@ public class NostrPublisher {
             System.out.println("Public key: " + SENDER.getPublicKey().toString());
             System.out.println("Private key: " + SENDER.getPrivateKey().toString());
 
-            Identity poolIdentity = Identity.generateRandomIdentity();
+            poolIdentity = Identity.generateRandomIdentity();
 
             long timeout = Instant.now().getEpochSecond() + 3600;
 

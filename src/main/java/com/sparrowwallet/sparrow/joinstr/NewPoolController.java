@@ -54,9 +54,7 @@ import javafx.collections.ListChangeListener;
 import javafx.collections.ObservableList;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
-import javafx.scene.control.ComboBox;
 import javafx.scene.control.TextField;
-import javafx.scene.control.Label;
 import javafx.scene.control.Alert;
 import javafx.scene.control.Alert.AlertType;
 
@@ -90,9 +88,6 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 double denominationValue = Double.parseDouble(denomination);
-                if(denominationUnit.getValue() == BitcoinUnit.SATOSHIS) {
-                    Long.parseLong(denomination);
-                }
                 if (denominationValue <= 0) {
                     showError("Denomination must be greater than zero");
                     return;
@@ -139,15 +134,13 @@ public class NewPoolController extends JoinstrFormController {
             try {
 
                 event = NostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
-
-                Alert alert = new Alert(AlertType.INFORMATION);
-                alert.setHeaderText(null);
                 assert event != null;
 
+                String poolPrivateKey = NostrPublisher.getPoolPrivateKey();
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
                 pools.add(pool);
                 Config.get().setPoolStore(pools);
 
@@ -199,10 +192,4 @@ public class NewPoolController extends JoinstrFormController {
         alert.setContentText(message);
         alert.showAndWait();
     }
-
-    private Address getNewReceiveAddress() {
-        NodeEntry freshNodeEntry = getWalletForm().getFreshNodeEntry(KeyPurpose.RECEIVE, null);
-        return freshNodeEntry.getAddress();
-    }
-
 }
