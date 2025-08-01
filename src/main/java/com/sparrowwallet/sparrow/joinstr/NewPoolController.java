@@ -94,15 +94,13 @@ public class NewPoolController extends JoinstrFormController {
             try {
 
                 event = NostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
-
-                Alert alert = new Alert(AlertType.INFORMATION);
-                alert.setHeaderText(null);
                 assert event != null;
 
+                String poolPrivateKey = NostrPublisher.getPoolPrivateKey();
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
                 ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
                 pools.add(pool);
                 Config.get().setPoolStore(pools);
 
@@ -136,12 +134,5 @@ public class NewPoolController extends JoinstrFormController {
         listener.startListening(decryptedMessage -> {
             logger.info("Received message: " + decryptedMessage);
         });
-    }
-    private void showError(String message) {
-        Alert alert = new Alert(AlertType.ERROR);
-        alert.setTitle("Error");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 }

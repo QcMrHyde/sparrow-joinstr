@@ -87,10 +87,7 @@ public class Config {
     private Double appHeight;
 
     // Joinstr settings
-
-
     private String nostrRelay;
-
     private ArrayList<JoinstrPool> poolStore;
 
     // ================

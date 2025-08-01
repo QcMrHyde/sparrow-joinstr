@@ -24,6 +24,7 @@ import com.sparrowwallet.sparrow.net.Tor;
 import java.util.*;
 
 import javafx.beans.property.SimpleStringProperty;
+import nostr.id.Identity;
 
 public class JoinstrPool {
 
@@ -32,6 +33,7 @@ public class JoinstrPool {
     private final SimpleStringProperty denomination;
     private final SimpleStringProperty peers;
     private final SimpleStringProperty timeout;
+    private final String privateKey;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
                        String peers, String timeout) {
@@ -40,6 +42,17 @@ public class JoinstrPool {
         this.denomination = new SimpleStringProperty(denomination);
         this.peers = new SimpleStringProperty(peers);
         this.timeout = new SimpleStringProperty(timeout);
+        this.privateKey = "";
+    }
+
+    public JoinstrPool(String relay, String pubkey, String denomination,
+                       String peers, String timeout, String privateKey) {
+        this.relay = new SimpleStringProperty(relay);
+        this.pubkey = new SimpleStringProperty(pubkey);
+        this.denomination = new SimpleStringProperty(denomination);
+        this.peers = new SimpleStringProperty(peers);
+        this.timeout = new SimpleStringProperty(timeout);
+        this.privateKey = privateKey;
     }
 
     public String getRelay() { return relay.get(); }
@@ -47,5 +60,6 @@ public class JoinstrPool {
     public String getDenomination() { return denomination.get(); }
     public String getPeers() { return peers.get(); }
     public String getTimeout() { return timeout.get(); }
+    public Identity getJoinstrIdentity() { return Identity.create(privateKey); }
 
 }
