@@ -1,29 +1,17 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.protocol.Transaction;
-import com.sparrowwallet.drongo.protocol.TransactionOutput;
-import com.sparrowwallet.drongo.psbt.PSBT;
-import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
-import com.sparrowwallet.drongo.wallet.BnBUtxoSelector;
-import com.sparrowwallet.drongo.wallet.CoinbaseTxoFilter;
-import com.sparrowwallet.drongo.wallet.FrozenTxoFilter;
-import com.sparrowwallet.drongo.wallet.InsufficientFundsException;
-import com.sparrowwallet.drongo.wallet.KnapsackUtxoSelector;
-import com.sparrowwallet.drongo.wallet.Payment;
-import com.sparrowwallet.drongo.wallet.SpentTxoFilter;
-import com.sparrowwallet.drongo.wallet.TxoFilter;
-import com.sparrowwallet.drongo.wallet.UtxoSelector;
-import com.sparrowwallet.drongo.wallet.Wallet;
-import com.sparrowwallet.drongo.wallet.WalletNode;
-import com.sparrowwallet.drongo.wallet.WalletTransaction;
-import com.sparrowwallet.sparrow.AppServices;
+import com.google.gson.Gson;
 import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.net.Tor;
+import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolStoreWrapper;
 
+import java.io.File;
+import java.io.FileNotFoundException;
+import java.io.FileWriter;
+import java.io.IOException;
 import java.util.*;
 
 import javafx.beans.property.SimpleStringProperty;
+import javafx.stage.FileChooser;
 import nostr.id.Identity;
 
 public class JoinstrPool {
@@ -61,5 +49,61 @@ public class JoinstrPool {
     public String getPeers() { return peers.get(); }
     public String getTimeout() { return timeout.get(); }
     public Identity getJoinstrIdentity() { return Identity.create(privateKey); }
+
+    public static void importPoolsFile(String directoryPath) {
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Open File");
+        fileChooser.setInitialFileName("pools.json");
+        fileChooser.setInitialDirectory(new File(directoryPath));
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Json files", "*.json")
+        );
+        File file = fileChooser.showOpenDialog(null);
+        Scanner scanner = null;
+        try {
+            scanner = new Scanner(file);
+        } catch (FileNotFoundException e) {
+            throw new RuntimeException(e);
+        }
+        StringBuilder text = new StringBuilder();
+        while (scanner.hasNextLine()) {
+            text.append(scanner.nextLine()).append("\n");
+        }
+        scanner.close();
+
+        try {
+            Gson gson = new Gson();
+            JoinstrPoolStoreWrapper psWrapper = gson.fromJson(text.toString(), JoinstrPoolStoreWrapper.class);
+            Config.get().setPoolStore(psWrapper.poolsList);
+        } catch (Exception e) {
+            if(e == null) {}
+        }
+    }
+
+    public static void exportPoolsFile(String directoryPath) throws IOException {
+
+        FileChooser fileChooser = new FileChooser();
+        fileChooser.setTitle("Save File");
+        fileChooser.setInitialFileName("pools.json");
+        fileChooser.setInitialDirectory(new File(directoryPath));
+        fileChooser.getExtensionFilters().addAll(
+                new FileChooser.ExtensionFilter("Json files", "*.json")
+        );
+
+        File file = fileChooser.showSaveDialog(null);
+        savePoolsFile(file.getPath());
+
+    }
+
+    public static void savePoolsFile(String filePath) throws IOException {
+
+        Gson gson = new Gson();
+        String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(Config.get().getPoolStore()));
+        FileWriter writer = new FileWriter(new File(filePath));
+        writer.write(poolsJson);
+        writer.close();
+
+    }
 
 }
