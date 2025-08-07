@@ -1,17 +1,13 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolStoreWrapper;
+import com.sparrowwallet.sparrow.io.Storage;
 
-import com.google.gson.Gson;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 
-import java.io.File;
-import java.io.FileNotFoundException;
-import java.io.FileWriter;
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.Scanner;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -19,7 +15,6 @@ import javafx.scene.control.TextField;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
-import javafx.stage.FileChooser;
 
 public class MyPoolsController extends JoinstrFormController {
 
@@ -62,59 +57,18 @@ public class MyPoolsController extends JoinstrFormController {
                 joinstrPoolList.setSelectedPool(selectedPool);
             }
 
-            // Import button
             ToggleButton importButton = new ToggleButton("Import pools");
             importButton.setOnAction(event -> {
-
-                FileChooser fileChooser = new FileChooser();
-                fileChooser.setTitle("Open File");
-                fileChooser.getExtensionFilters().addAll(
-                        new FileChooser.ExtensionFilter("Json files", "*.json")
-                );
-                File file = fileChooser.showOpenDialog(null);
-                Scanner scanner = null;
-                try {
-                    scanner = new Scanner(file);
-                } catch (FileNotFoundException e) {
-                    throw new RuntimeException(e);
-                }
-                StringBuilder text = new StringBuilder();
-                while (scanner.hasNextLine()) {
-                    text.append(scanner.nextLine()).append("\n");
-                }
-                scanner.close();
-
-                try {
-                    Gson gson = new Gson();
-                    JoinstrPoolStoreWrapper psWrapper = gson.fromJson(text.toString(), JoinstrPoolStoreWrapper.class);
-                    Config.get().setPoolStore(psWrapper.poolsList);
-                    addPoolStoreData();
-                } catch (Exception e) {
-                    if(e == null) {}
-                }
-
+                JoinstrPool.importPoolsFile(Storage.getSparrowDir().getPath());
+                addPoolStoreData();
             });
 
-            // Export button
             ToggleButton exportButton = new ToggleButton("Export pools");
             exportButton.setOnAction(event -> {
 
-                FileChooser fileChooser = new FileChooser();
-                fileChooser.setTitle("Save File");
-                fileChooser.setInitialFileName("pools.json");
-                fileChooser.getExtensionFilters().addAll(
-                        new FileChooser.ExtensionFilter("Json files", "*.json")
-                );
-
-                File file = fileChooser.showSaveDialog(null);
-
                 try {
-                    Gson gson = new Gson();
-                    String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(Config.get().getPoolStore()));
-                    FileWriter writer = new FileWriter(file);
-                    writer.write(poolsJson);
-                    writer.close();
-                } catch (Exception e) {
+                    JoinstrPool.exportPoolsFile(Storage.getSparrowDir().getPath());
+                } catch (IOException e) {
                     showError("Error writing file to disk.");
                 }
 
