@@ -11,15 +11,13 @@ import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
+import java.io.IOException;
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.Map;
 import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
-import javafx.scene.control.Alert;
-import javafx.scene.control.Alert.AlertType;
 
 import nostr.event.impl.GenericEvent;
 import nostr.id.Identity;
@@ -97,17 +95,13 @@ public class NewPoolController extends JoinstrFormController {
             try {
 
                 event = NostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
-
-                Alert alert = new Alert(AlertType.INFORMATION);
-                alert.setHeaderText(null);
                 assert event != null;
 
+                String poolPrivateKey = NostrPublisher.getPoolPrivateKey();
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
-                ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout);
-                pools.add(pool);
-                Config.get().setPoolStore(pools);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
+                updatePoolStore(pool);
 
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
@@ -124,7 +118,9 @@ public class NewPoolController extends JoinstrFormController {
                     "New Pool",
                     "Pool created successfully!\nEvent ID: " + event.getId() +
                             "\nDenomination: " + denomination +
-                            "\nPeers: " + peers
+                            "\nPeers: " + peers +
+                            "\n\nPool data saved in file:" +
+                            "\n\"" + Storage.getJoinstrPoolsFile().getPath() + "\""
             );
 
             Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
@@ -142,6 +138,18 @@ public class NewPoolController extends JoinstrFormController {
         }
     }
 
+    private void updatePoolStore(JoinstrPool pool) throws IOException {
+
+        ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
+
+        pools.removeIf(p -> p.getJoinstrIdentity() == pool.getJoinstrIdentity());
+        pools.add(pool);
+        Config.get().setPoolStore(pools);
+
+        JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
+
+    }
+
     public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials){
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
@@ -149,12 +157,5 @@ public class NewPoolController extends JoinstrFormController {
         listener.startListening(decryptedMessage -> {
             logger.info("Received message: " + decryptedMessage);
         });
-    }
-    private void showError(String message) {
-        Alert alert = new Alert(AlertType.ERROR);
-        alert.setTitle("Error");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
     }
 }

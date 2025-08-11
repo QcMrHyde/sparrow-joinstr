@@ -493,6 +493,17 @@ public class Storage {
         return walletsDir;
     }
 
+    public static File getJoinstrPoolsFile() {
+        String filePath = getSparrowDir().getPath();
+
+        File joinstrPoolsFile = new File((isWindows() ? filePath + "\\" : filePath + "/") + "pools.json");
+        if(!joinstrPoolsFile.exists()) {
+            createOwnerOnlyFile(joinstrPoolsFile);
+        }
+
+        return joinstrPoolsFile;
+    }
+
     public static File getCertificateFile(String host) {
         File certsDir = getCertsDir();
         File[] certs = certsDir.listFiles((dir, name) -> name.equals(host));

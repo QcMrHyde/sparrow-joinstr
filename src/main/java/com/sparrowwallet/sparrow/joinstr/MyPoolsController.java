@@ -1,14 +1,19 @@
 package com.sparrowwallet.sparrow.joinstr;
 
+import com.sparrowwallet.sparrow.io.Storage;
+
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 
+import java.io.IOException;
 import java.util.ArrayList;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
+import javafx.scene.control.ToggleButton;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
 public class MyPoolsController extends JoinstrFormController {
@@ -51,7 +56,30 @@ public class MyPoolsController extends JoinstrFormController {
             if(selectedPool != null) {
                 joinstrPoolList.setSelectedPool(selectedPool);
             }
-            contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane);
+
+            ToggleButton importButton = new ToggleButton("Import pools");
+            importButton.setOnAction(event -> {
+                JoinstrPool.importPoolsFile(Storage.getSparrowDir().getPath());
+                addPoolStoreData();
+            });
+
+            ToggleButton exportButton = new ToggleButton("Export pools");
+            exportButton.setOnAction(event -> {
+
+                try {
+                    JoinstrPool.exportPoolsFile(Storage.getSparrowDir().getPath());
+                } catch (IOException e) {
+                    showError("Error writing file to disk.");
+                }
+
+            });
+
+            HBox buttonsHBox = new HBox();
+            buttonsHBox.setSpacing(15);
+            buttonsHBox.getChildren().addAll(importButton, exportButton);
+
+            contentVBox.setSpacing(10);
+            contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane, buttonsHBox);
 
             searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
                 filterPools(newValue);
@@ -67,6 +95,8 @@ public class MyPoolsController extends JoinstrFormController {
 
     private void addPoolStoreData() {
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
+
+        joinstrPoolList.clearPools();
         for (JoinstrPool pool: pools) {
             joinstrPoolList.addPool(pool);
         }
