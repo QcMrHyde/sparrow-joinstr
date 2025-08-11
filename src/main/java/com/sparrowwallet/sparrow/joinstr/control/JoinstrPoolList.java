@@ -58,26 +58,31 @@ public class JoinstrPoolList extends VBox {
 
         TableColumn<JoinstrPool, String> pubkeyColumn = new TableColumn<>("Pubkey");
         pubkeyColumn.setCellValueFactory(new PropertyValueFactory<>("pubkey"));
-        pubkeyColumn.setPrefWidth(200);
+        pubkeyColumn.setPrefWidth(150);
 
         TableColumn<JoinstrPool, String> denominationColumn = new TableColumn<>("Denomination");
         denominationColumn.setCellValueFactory(new PropertyValueFactory<>("denomination"));
-        denominationColumn.setPrefWidth(150);
+        denominationColumn.setPrefWidth(100);
 
         TableColumn<JoinstrPool, String> peersColumn = new TableColumn<>("Peers");
         peersColumn.setCellValueFactory(new PropertyValueFactory<>("peers"));
-        peersColumn.setPrefWidth(80);
+        peersColumn.setPrefWidth(50);
 
         TableColumn<JoinstrPool, String> timeoutColumn = new TableColumn<>("Timeout");
         timeoutColumn.setCellValueFactory(new PropertyValueFactory<>("timeout"));
         timeoutColumn.setPrefWidth(100);
+
+        TableColumn<JoinstrPool, String> statusColumn = new TableColumn<>("Status");
+        statusColumn.setCellValueFactory(param -> param.getValue().statusProperty());
+        statusColumn.setPrefWidth(150);
 
         poolTableView.getColumns().addAll(
                 relayColumn,
                 pubkeyColumn,
                 denominationColumn,
                 peersColumn,
-                timeoutColumn
+                timeoutColumn,
+                statusColumn
         );
 
         poolTableView.getSelectionModel().selectedItemProperty().addListener(
@@ -135,18 +140,8 @@ public class JoinstrPoolList extends VBox {
 
                             System.out.println("Join request sent. Event ID:: " + encrypted_event.getId());
 
-                            Alert waitingDialog = new Alert(Alert.AlertType.NONE);
-                            waitingDialog.initModality(Modality.APPLICATION_MODAL);
-                            waitingDialog.setTitle("Waiting");
-                            waitingDialog.setHeaderText(null);
-
-                            ProgressIndicator spinner = new ProgressIndicator();
-                            Label waitingLabel = new Label("  Waiting for pool credentials...");
-                            HBox content = new HBox(spinner, waitingLabel);
-                            content.setSpacing(10);
-                            waitingDialog.getDialogPane().setContent(content);
-
-                            waitingDialog.show();
+                            pool.setStatus("waiting for credentials");
+                            joinButton.setDisable(true);
                         });
                     }
 

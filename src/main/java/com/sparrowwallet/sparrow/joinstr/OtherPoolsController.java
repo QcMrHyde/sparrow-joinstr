@@ -69,7 +69,7 @@ public class OtherPoolsController extends JoinstrFormController {
                 "03ab4...e92f",
                 "0.001 BTC",
                 "4/5",
-                "00:00:00 UTC"
+                "00:00:00"
         );
 
         JoinstrPool pool2 = new JoinstrPool(
@@ -77,7 +77,7 @@ public class OtherPoolsController extends JoinstrFormController {
                 "1bd340cb690bf3fd35106b2434230cf23d539d89824efbde1605b61c21fa9543",
                 "0.005 BTC",
                 "3/7",
-                "00:00:00 UTC"
+                "00:00:00"
         );
 
         joinstrPoolList.addPool(pool1);
