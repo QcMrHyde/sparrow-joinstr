@@ -123,6 +123,7 @@ public class NewPoolController extends JoinstrFormController {
                             "\n\"" + Storage.getJoinstrPoolsFile().getPath() + "\""
             );
 
+            /*
             Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
 
             for (Map.Entry<BlockTransactionHashIndex, WalletNode> entry : utxos.entrySet()) {
@@ -132,6 +133,7 @@ public class NewPoolController extends JoinstrFormController {
 
             UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
             dialog.showAndWait();
+             */
 
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
