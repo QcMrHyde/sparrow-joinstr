@@ -22,6 +22,7 @@ public class JoinstrPool {
     private final SimpleStringProperty peers;
     private final SimpleStringProperty timeout;
     private final String privateKey;
+    private final SimpleStringProperty status;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
                        String peers, String timeout) {
@@ -31,6 +32,7 @@ public class JoinstrPool {
         this.peers = new SimpleStringProperty(peers);
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = "";
+        this.status = new SimpleStringProperty("");
     }
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -41,6 +43,7 @@ public class JoinstrPool {
         this.peers = new SimpleStringProperty(peers);
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = privateKey;
+        this.status = new SimpleStringProperty("");
     }
 
     public String getRelay() { return relay.get(); }
@@ -49,6 +52,11 @@ public class JoinstrPool {
     public String getPeers() { return peers.get(); }
     public String getTimeout() { return timeout.get(); }
     public Identity getJoinstrIdentity() { return Identity.create(privateKey); }
+
+    public String getStatus() { return status.get();}
+    public void setStatus(String status) {this.status.set(status);}
+
+    public SimpleStringProperty statusProperty() {return status;}
 
     public static void importPoolsFile(String directoryPath) {
 
