@@ -18,25 +18,28 @@
         <Insets top="30" right="30" bottom="30" left="30"/>
     </padding>
     <center>
-        <VBox maxWidth="Infinity" fx:id="contentVBox" spacing="20">
-                <Label styleClass="title">Create a new pool</Label>
-                <Form maxWidth="Infinity" style="-fx-max-width: 600px;">
-                    <Fieldset inputGrow="ALWAYS">
-                        <Field text="Denomination:" style="-fx-text-fill: #aaaaaa;">
+        <VBox alignment="CENTER" spacing="20">
+            <Label styleClass="title" text="Create a new pool"/>
+            <Form style="-fx-max-width: 400px;">
+                <Fieldset inputGrow="ALWAYS">
+                    <Field text="Denomination:" style="-fx-text-fill: #aaaaaa;">
                             <TextField fx:id="denominationField" promptText="Required" styleClass="textfield-dark" style="-fx-max-width: 100px;">
                                 <tooltip>
                                     <Tooltip text="Required to create coinjoin pool"/>
                                 </tooltip>
                             </TextField>
-                        </Field>
-                        <Field text="Number of Peers:" style="-fx-text-fill: #aaaaaa;">
+                    </Field>
+                    <Field text="Number of Peers:" style="-fx-text-fill: #aaaaaa;">
                             <TextField fx:id="peersField" promptText="Req." styleClass="textfield-dark" style="-fx-max-width: 50px;" />
-                        </Field>
-                        <Field>
-                            <ToggleButton fx:id="createButton" text="Create" onAction="#handleCreateButton" style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-cursor: hand;" />
-                        </Field>
-                    </Fieldset>
-                </Form>
-            </VBox>
+                    </Field>
+                    <Field>
+                        <VBox alignment="CENTER">
+                            <ToggleButton fx:id="createButton" text="Create" onAction="#handleCreateButton"
+                                style="-fx-background-color: #2196F3; -fx-text-fill: white; -fx-cursor: hand;" />
+                        </VBox>
+                    </Field>
+                </Fieldset>
+            </Form>
+        </VBox>
     </center>
 </BorderPane>
