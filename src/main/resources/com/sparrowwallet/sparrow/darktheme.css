@@ -117,8 +117,40 @@ HorizontalHeaderColumn > TableColumnHeader.column-header.table-column{
 }
 
 .sub-title {
-    -fx-font-size: 14px;
+    -fx-font-size: 16px;
+    -fx-text-fill: white;
+    -fx-font-weight: bold;
+}
+
+.sub-title-grey {
+    -fx-font-size: 16px;
     -fx-text-fill: #aaaaaa;
+}
+
+.textfield-dark {
+    -fx-background-color: #444444;
+    -fx-text-fill: white;
+    -fx-prompt-text-fill: #888888;
+}
+
+.text-grey {
+    -fx-text-fill: #aaaaaa;
+}
+
+.form-grid Label {
+    -fx-text-fill: white;
+}
+
+.joinstr-infopane {
+    -fx-background-color: #222222;
+    -fx-padding: 15;
+    -fx-border-width: 1px;
+}
+
+.joinstr-list-menu .list-item {
+    -fx-padding: 0 0 0 0;
+    -fx-border-color: #2284bb;
+    -fx-border-width: 1px;
 }
 
 .joinstr-balance-container {
