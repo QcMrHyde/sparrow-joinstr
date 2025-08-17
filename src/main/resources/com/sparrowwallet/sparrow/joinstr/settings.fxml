@@ -22,7 +22,7 @@
                 <children>
 
                     <Label GridPane.rowIndex="4" GridPane.columnIndex="0">Nostr Relay:</Label>
-                    <TextField prefWidth="100" maxWidth="150" GridPane.rowIndex="4" GridPane.columnIndex="1" fx:id="nostrRelayTextField">wss://nostr.fmt.wiz.biz</TextField>
+                    <TextField prefWidth="100" maxWidth="150" GridPane.rowIndex="4" GridPane.columnIndex="1" fx:id="nostrRelayTextField">wss://nos.lol</TextField>
 
                 </children>
             </GridPane>

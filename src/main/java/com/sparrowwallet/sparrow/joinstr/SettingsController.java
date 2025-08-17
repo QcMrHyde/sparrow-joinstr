@@ -37,7 +37,7 @@ public class SettingsController extends JoinstrFormController {
 
     public void setDefaultNostrRelayIfEmpty() {
         if(nostrRelayTextField.getText() == null || nostrRelayTextField.getText().isEmpty()) {
-            nostrRelayTextField.setText("wss://nostr.fmt.wiz.biz");
+            nostrRelayTextField.setText("wss://nos.lol");
         }
     }
 
