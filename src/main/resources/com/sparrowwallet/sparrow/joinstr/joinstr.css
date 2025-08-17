@@ -1,59 +1,9 @@
 
-.joinstr-list-action-button {
-    -fx-background-color: #3DA0E3;
-    -fx-padding:10, 30, 10, 30;
-    -fx-text-fill: white;
-    -fx-font-weight: bold;
-}
-
-.joinstr-list-header {
-    -fx-padding:10, 0, 10, 0;
-    -fx-font-weight: bold;
-    -fx-font-size: 1.3em;
-    -fx-background-color: lightgray;
-    -fx-background-radius: 5px;
-}
-
-.joinstr-list-item-subtitle {
-    -fx-font-size: 1em;
-}
-
-.joinstr-list-item {
-    -fx-font-size: 1.2em;
-}
-
-.joinstr-list-row {
-    -fx-padding:10, 0, 10, 0;
-    -fx-background-color: #DDDDDD;
-    -fx-background-radius: 5px;
-    -fx-border-style:solid;
+.joinstr-infopane {
+    -fx-background-color: white;
+    -fx-padding: 15;
     -fx-border-width: 3px;
-    -fx-border-radius: 5px;
-    -fx-border-color: #DDDDDD;
-}
-
-.joinstr-list-row:hover {
-    -fx-padding:10, 0, 10, 0;
-    -fx-background-color: lightgray;
-    -fx-background-radius: 5px;
-    -fx-border-style:solid;
-    -fx-border-width: 3px;
-    -fx-border-radius: 5px;
-    -fx-border-color: #1A6BA2;
-}
-
-.joinstr-balance-label {
-    -fx-text-fill: white;
-}
-
-.joinstr-balance-label Glyph {
-    -fx-text-fill: white;
-}
-
-.joinstr-balance-container {
-    -fx-padding:30, 0, 30, 0;
-    -fx-background-color: #1A6BA2;
-    -fx-text-alignment: center;
+    -fx-border-color: #000000;
 }
 
 .title {
@@ -65,10 +15,19 @@
 .sub-title {
     -fx-padding:0, 10, 0, 10;
     -fx-font-size: 1.5em;
+    -fx-font-weight: bold;
 }
 
-.list-menu {
+.joinstr-list-menu {
+    -fx-pref-width: 180;
     -fx-background-color: #3da0e3;
+    -fx-padding: 0 0 0 0;
+}
+
+.list-item {
+    -fx-padding: 0 0 0 0;
+    -fx-border-color: #3da0e3;
+    -fx-border-width: 1px;
 }
 
 .list-item * {

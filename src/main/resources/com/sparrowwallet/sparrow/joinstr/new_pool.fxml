@@ -23,14 +23,14 @@
             <Form style="-fx-max-width: 400px;">
                 <Fieldset inputGrow="ALWAYS">
                     <Field text="Denomination:" style="-fx-text-fill: #aaaaaa;">
-                        <TextField fx:id="denominationField" style="-fx-max-width: 200px;-fx-background-color: #444444; -fx-text-fill: white; -fx-prompt-text-fill: #888888;">
+                        <TextField fx:id="denominationField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
                             <tooltip>
                                 <Tooltip text="Required to create coinjoin pool"/>
                             </tooltip>
                         </TextField>
                     </Field>
                     <Field text="Number of Peers:" style="-fx-text-fill: #aaaaaa;">
-                        <TextField fx:id="peersField" style="-fx-max-width: 200px;-fx-background-color: #444444; -fx-text-fill: white; -fx-prompt-text-fill: #888888;" />
+                        <TextField fx:id="peersField" styleClass="textfield-dark" style="-fx-max-width: 200px;" />
                     </Field>
                     <Field>
                         <VBox alignment="CENTER">
