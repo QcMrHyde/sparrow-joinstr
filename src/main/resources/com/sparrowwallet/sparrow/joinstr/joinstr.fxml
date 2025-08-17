@@ -11,7 +11,7 @@
 <BorderPane stylesheets="@joinstr.css, @../wallet/wallet.css" xmlns="http://javafx.com/javafx" xmlns:fx="http://javafx.com/fxml" fx:controller="com.sparrowwallet.sparrow.joinstr.JoinstrController"
     maxHeight="-Infinity" maxWidth="-Infinity" prefHeight="770.0" prefWidth="1070.0">
     <left>
-        <VBox fx:id="joinstrMenuBox" styleClass="list-menu">
+        <VBox fx:id="joinstrMenuBox" styleClass="joinstr-list-menu">
             <ToggleButton VBox.vgrow="ALWAYS" text="New pool" contentDisplay="CENTER" styleClass="list-item" maxHeight="Infinity" toggleGroup="$joinstrMenu">
                 <toggleGroup>
                     <ToggleGroup fx:id="joinstrMenu" />
