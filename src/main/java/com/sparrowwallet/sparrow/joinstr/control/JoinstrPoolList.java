@@ -3,11 +3,6 @@ package com.sparrowwallet.sparrow.joinstr.control;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
-import javafx.scene.control.Alert;
-import javafx.scene.control.Label;
-import javafx.scene.control.ProgressIndicator;
-import javafx.scene.layout.HBox;
-import javafx.stage.Modality;
 import nostr.id.Identity;
 import nostr.event.BaseTag;
 import nostr.event.tag.PubKeyTag;
@@ -24,6 +19,8 @@ import javafx.scene.control.TableView;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
+
+import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
 
@@ -84,6 +81,53 @@ public class JoinstrPoolList extends VBox {
                 timeoutColumn,
                 statusColumn
         );
+
+        poolTableView.setOnSort(event -> {
+
+            ObservableList<TableColumn<JoinstrPool, ?>> sortOrder = poolTableView.getSortOrder();
+
+            if (!sortOrder.isEmpty()) {
+                // Create a custom comparator based on sort order
+                Comparator<JoinstrPool> comparator = null;
+
+                for (TableColumn<JoinstrPool, ?> column : sortOrder) {
+                    Comparator<JoinstrPool> columnComparator = null;
+
+                    if (column == relayColumn) {
+                        columnComparator = Comparator.comparing(JoinstrPool::getRelay, String.CASE_INSENSITIVE_ORDER);
+                    } else if (column == pubkeyColumn) {
+                        columnComparator = Comparator.comparing(JoinstrPool::getPubkey, String.CASE_INSENSITIVE_ORDER);
+                    } else if (column == denominationColumn) {
+                        columnComparator = Comparator.comparing(JoinstrPool::getDenomination, String.CASE_INSENSITIVE_ORDER);
+                    } else if (column == peersColumn) {
+                        columnComparator = Comparator.comparing(JoinstrPool::getPeers, String.CASE_INSENSITIVE_ORDER);
+                    } else if (column == timeoutColumn) {
+                        columnComparator = Comparator.comparing(JoinstrPool::getTimeout, String.CASE_INSENSITIVE_ORDER);
+                    }
+
+                    // Handle sort type (ascending/descending)
+                    if (columnComparator != null) {
+                        if (column.getSortType() == TableColumn.SortType.DESCENDING) {
+                            columnComparator = columnComparator.reversed();
+                        }
+
+                        // Chain comparators for multi-column sorting
+                        if (comparator == null) {
+                            comparator = columnComparator;
+                        } else {
+                            comparator = comparator.thenComparing(columnComparator);
+                        }
+                    }
+                }
+
+                if (comparator != null) {
+                    FXCollections.sort(poolData, comparator);
+                }
+            }
+
+            event.consume();
+
+        });
 
         poolTableView.getSelectionModel().selectedItemProperty().addListener(
                 (obs, oldSelection, newSelection) -> {
