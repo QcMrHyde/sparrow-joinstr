@@ -43,8 +43,8 @@ java {
 
 dependencies {
     //Any changes to the dependencies must be reflected in the module definitions below!
-    implementation('com.github.tcheeric:nostr-java:v0.007.1-alpha') {
-        exclude group: 'com.github.tcheeric.nostr-java', module: 'nostr-java-test'
+    implementation('com.github.1440000bytes:nostr-java:v0.007.2-alpha') {
+        exclude group: 'com.github.1440000bytes', module: 'nostr-java-test'
     }
     implementation(project(':drongo'))
     implementation(project(':lark'))
