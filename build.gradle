@@ -45,7 +45,7 @@ java {
 dependencies {
     //Any changes to the dependencies must be reflected in the module definitions below!
     implementation('com.github.1440000bytes:nostr-java:v0.007.2-alpha') {
-        exclude group: 'com.github.1440000bytes', module: 'nostr-java-test'
+        exclude module: 'nostr-java-test'
     }
     implementation(project(':drongo'))
     implementation(project(':lark'))
@@ -351,7 +351,7 @@ tasks.register('packageTarDistribution', Tar) {
 }
 
 extraJavaModuleInfo {
-    module('com.github.tcheeric:nostr-java', 'nostr.java') {
+    module('com.github.1440000bytes:nostr-java', 'nostr.java') {
         exports('nostr.api')
         exports('nostr.base')
         exports('nostr.event')
