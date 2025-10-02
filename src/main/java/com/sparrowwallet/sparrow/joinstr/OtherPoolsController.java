@@ -2,6 +2,7 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 import javafx.application.Platform;
@@ -41,6 +42,8 @@ public class OtherPoolsController extends JoinstrFormController {
     private Label noPoolsLabel;
     private Timer poolRefreshTimer;
 
+    private ArrayList<JoinstrPool> myPools;
+
     @Override
     public void initializeView() {
         try {
@@ -73,6 +76,8 @@ public class OtherPoolsController extends JoinstrFormController {
             searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
                 filterPools(newValue);
             });
+
+            myPools = Config.get().getPoolStore();
 
             startPoolRefresh();
 
@@ -141,10 +146,13 @@ public class OtherPoolsController extends JoinstrFormController {
                                                     formattedTimeout
                                             );
 
-                                            if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                                            if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
+                                               myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+
                                                 pools.add(pool);
                                                 logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
                                                 Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
+
                                             }
 
                                         }
