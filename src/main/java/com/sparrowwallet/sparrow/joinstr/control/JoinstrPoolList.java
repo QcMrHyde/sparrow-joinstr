@@ -41,7 +41,7 @@ public class JoinstrPoolList extends VBox {
     private void initialize() {
         // Create the table
         poolTableView = new TableView<>();
-        poolTableView.setStyle("-fx-background-color: #222222; -fx-text-fill: white;");
+        poolTableView.getStyleClass().add("joinstr-list-tableview");
 
         // Create data storage
         poolData = FXCollections.observableArrayList();
