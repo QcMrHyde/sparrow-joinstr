@@ -141,12 +141,13 @@ public class OtherPoolsController extends JoinstrFormController {
                                                     "0/" + poolData.get("peers").asText(),
                                                     formattedTimeout
                                             );
-                                            pools.add(pool);
 
-                                            logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
+                                            if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                                                pools.add(pool);
+                                                logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
+                                                Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
+                                            }
 
-
-                                            Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
                                         }
                                     }
                                 }
