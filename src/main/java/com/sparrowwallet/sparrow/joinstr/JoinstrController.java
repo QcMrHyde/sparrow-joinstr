@@ -67,6 +67,7 @@ public class JoinstrController extends JoinstrFormController {
             stage.getScene().getStylesheets().remove(darkCss);
         }
 
+        setJoinstrDisplay(JoinstrDisplay.NEW_POOL);
     }
 
     public JoinstrPool getSelectedPool() {
@@ -87,6 +88,13 @@ public class JoinstrController extends JoinstrFormController {
                 joinstrDisplay.setViewOrder(0);
             } else {
                 joinstrDisplay.setViewOrder(1);
+            }
+        }
+
+        for(int idx=0;idx<joinstrMenu.getToggles().size();idx++) {
+            if(joinstrMenu.getToggles().get(idx).getUserData().equals(display)) {
+                joinstrMenu.selectToggle(joinstrMenu.getToggles().get(idx));
+                break;
             }
         }
 

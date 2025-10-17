@@ -2,6 +2,8 @@
 <?import javafx.scene.*?>
 <?import javafx.scene.control.*?>
 <?import javafx.scene.layout.*?>
+<?import javafx.scene.image.Image?>
+<?import javafx.scene.image.ImageView?>
 <?import javafx.geometry.Insets?>
 <?import javafx.collections.FXCollections?>
 
@@ -19,6 +21,11 @@
     </padding>
     <center>
         <VBox alignment="CENTER" spacing="20">
+            <ImageView fitHeight="200" fitWidth="200" preserveRatio="true">
+                <image>
+                    <Image url="@/image/joinstr/joinstr.png"/>
+                </image>
+            </ImageView>
             <Label styleClass="title" text="Create a new pool"/>
             <Form style="-fx-max-width: 400px;">
                 <Fieldset inputGrow="ALWAYS">
