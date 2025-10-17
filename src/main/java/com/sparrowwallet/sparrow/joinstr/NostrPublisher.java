@@ -60,7 +60,7 @@ public class NostrPublisher {
 
             poolIdentity = Identity.generateRandomIdentity();
 
-            long timeout = Instant.now().getEpochSecond() + 3600;
+            long timeout = Instant.now().getEpochSecond() + 600;
 
             List<BaseTag> tags = new ArrayList<>();
             String poolId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);

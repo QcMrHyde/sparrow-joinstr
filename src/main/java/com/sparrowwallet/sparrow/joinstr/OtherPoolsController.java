@@ -3,8 +3,7 @@ package com.sparrowwallet.sparrow.joinstr;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
+
 import javafx.application.Platform;
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -27,7 +26,7 @@ import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-public class OtherPoolsController extends JoinstrFormController {
+public class OtherPoolsController extends JoinstrPoolListFormController {
     private static final Logger logger = Logger.getLogger(OtherPoolsController.class.getName());
     private static final String DEFAULT_RELAY = "wss://nos.lol";
 
@@ -37,9 +36,7 @@ public class OtherPoolsController extends JoinstrFormController {
     @FXML
     private TextField searchTextField;
 
-    private JoinstrPoolList joinstrPoolList;
-    private JoinstrInfoPane joinstrInfoPane;
-    private Label noPoolsLabel;
+    private Label infoPoolsLabel;
     private Timer poolRefreshTimer;
 
     private ArrayList<JoinstrPool> myPools;
@@ -47,34 +44,19 @@ public class OtherPoolsController extends JoinstrFormController {
     @Override
     public void initializeView() {
         try {
-            joinstrPoolList = new JoinstrPoolList();
+            super.initializeView();
+            joinstrPoolList.filterCreatedPools();
             joinstrPoolList.configureWithJoinButtons();
+            joinstrPoolList.setVisible(false);
+            joinstrPoolList.setManaged(false);
 
-            noPoolsLabel = new Label("No pools found");
-            noPoolsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #666666;");
-            noPoolsLabel.setVisible(false);
-            noPoolsLabel.setManaged(false);
+            infoPoolsLabel = new Label("Looking for pools...");
+            infoPoolsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #666666;");
 
-            joinstrInfoPane = new JoinstrInfoPane();
-            joinstrInfoPane.initInfoPane();
-            joinstrInfoPane.setVisible(false);
-            joinstrInfoPane.setManaged(false);
-
-            joinstrPoolList.setOnPoolSelectedListener(pool -> {
-                if (pool != null) {
-                    joinstrInfoPane.setVisible(true);
-                    joinstrInfoPane.setManaged(true);
-                    joinstrInfoPane.updatePoolInfo(pool);
-                } else {
-                    joinstrInfoPane.setVisible(false);
-                    joinstrInfoPane.setManaged(false);
-                }
-            });
-
-            contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane, noPoolsLabel);
+            contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane, infoPoolsLabel);
 
             searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
-                filterPools(newValue);
+                joinstrPoolList.filterPools(newValue);
             });
 
             myPools = Config.get().getPoolStore();
@@ -210,26 +192,23 @@ public class OtherPoolsController extends JoinstrFormController {
     private void updateUIWithPools(List<JoinstrPool> pools) {
         joinstrPoolList.clearPools();
         if (pools.isEmpty()) {
-            noPoolsLabel.setVisible(true);
-            noPoolsLabel.setManaged(true);
+            infoPoolsLabel.setText("No pools found");
+            infoPoolsLabel.setVisible(true);
+            infoPoolsLabel.setManaged(true);
             joinstrPoolList.setVisible(false);
             joinstrPoolList.setManaged(false);
         } else {
-            noPoolsLabel.setVisible(false);
-            noPoolsLabel.setManaged(false);
+            infoPoolsLabel.setVisible(false);
+            infoPoolsLabel.setManaged(false);
             joinstrPoolList.setVisible(true);
             joinstrPoolList.setManaged(true);
             pools.forEach(joinstrPoolList::addPool);
         }
     }
 
-    private void filterPools(String searchText) {
-        joinstrPoolList.filterPools(searchText);
-    }
-
     public void handleSearchButton(ActionEvent e) {
         if(e.getSource() == searchTextField) {
-            filterPools(searchTextField.getText());
+            joinstrPoolList.filterPools(searchTextField.getText());
         }
     }
 

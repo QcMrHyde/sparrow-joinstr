@@ -2,12 +2,7 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import com.sparrowwallet.sparrow.io.Storage;
 
-import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
-
 import java.io.IOException;
-import java.util.ArrayList;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -16,7 +11,7 @@ import javafx.scene.control.ToggleButton;
 import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 
-public class MyPoolsController extends JoinstrFormController {
+public class MyPoolsController extends JoinstrPoolListFormController {
 
     @FXML
     private VBox contentVBox;
@@ -24,43 +19,16 @@ public class MyPoolsController extends JoinstrFormController {
     @FXML
     private TextField searchTextField;
 
-    private JoinstrPoolList joinstrPoolList;
-    private JoinstrInfoPane joinstrInfoPane;
-
     @Override
     public void initializeView() {
         try {
-            joinstrPoolList = new JoinstrPoolList();
-
-            // Add pool store data
-            addPoolStoreData();
-
-            joinstrInfoPane = new JoinstrInfoPane();
-            joinstrInfoPane.initInfoPane();
-            joinstrInfoPane.setVisible(false);
-            joinstrInfoPane.setManaged(false);
-
-            joinstrPoolList.setOnPoolSelectedListener(pool -> {
-                if (pool != null) {
-                    getJoinstrController().setSelectedPool(pool);
-                    joinstrInfoPane.setVisible(true);
-                    joinstrInfoPane.setManaged(true);
-                    joinstrInfoPane.updatePoolInfo(pool);
-                } else {
-                    joinstrInfoPane.setVisible(false);
-                    joinstrInfoPane.setManaged(false);
-                }
-            });
-
-            JoinstrPool selectedPool = getJoinstrController().getSelectedPool();
-            if(selectedPool != null) {
-                joinstrPoolList.setSelectedPool(selectedPool);
-            }
+            super.initializeView();
+            joinstrPoolList.filterOutdatedPools(false);
 
             ToggleButton importButton = new ToggleButton("Import pools");
             importButton.setOnAction(event -> {
                 JoinstrPool.importPoolsFile(Storage.getSparrowDir().getPath());
-                addPoolStoreData();
+                addPoolsData();
             });
 
             ToggleButton exportButton = new ToggleButton("Export pools");
@@ -82,7 +50,7 @@ public class MyPoolsController extends JoinstrFormController {
             contentVBox.getChildren().addAll(joinstrPoolList, joinstrInfoPane, buttonsHBox);
 
             searchTextField.textProperty().addListener((observable, oldValue, newValue) -> {
-                filterPools(newValue);
+                joinstrPoolList.filterPools(newValue);
             });
 
         } catch (Exception e) {
@@ -91,19 +59,6 @@ public class MyPoolsController extends JoinstrFormController {
             }
         }
 
-    }
-
-    private void addPoolStoreData() {
-        ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-
-        joinstrPoolList.clearPools();
-        for (JoinstrPool pool: pools) {
-            joinstrPoolList.addPool(pool);
-        }
-    }
-
-    private void filterPools(String searchText) {
-        joinstrPoolList.filterPools(searchText);
     }
 
     public void handleSearchButton(ActionEvent e) {
