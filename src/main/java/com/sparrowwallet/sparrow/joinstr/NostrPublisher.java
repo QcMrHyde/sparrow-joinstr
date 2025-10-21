@@ -8,6 +8,7 @@ import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.psbt.PSBT;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import com.sparrowwallet.sparrow.io.Storage;
@@ -44,15 +45,11 @@ public class NostrPublisher {
     }
 
     public static GenericEvent publishCustomEvent(String denomination, String peers, String bitcoinAddress) {
-        Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+
         if (bitcoinAddress.isEmpty()) {
             System.err.println("No Bitcoin Address found. Please open a wallet in Sparrow first.");
             return null;
         }
-
-        Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-        Wallet wallet = firstWallet.getKey();
-        Storage storage = firstWallet.getValue();
 
         try {
             System.out.println("Public key: " + SENDER.getPublicKey().toString());
@@ -105,8 +102,8 @@ public class NostrPublisher {
             }
 
             String addressContent = String.format(
-            "{\"type\":\"output\",\"address\":\"%s\"}",
-            bitcoinAddress
+                    "{\"type\":\"output\",\"address\":\"%s\"}",
+                    bitcoinAddress
             );
 
             NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
@@ -115,10 +112,10 @@ public class NostrPublisher {
             tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
 
             GenericEvent encrypted_event = new GenericEvent(
-            poolIdentity.getPublicKey(),
-            4,
-            tags,
-            encryptedContent
+                    poolIdentity.getPublicKey(),
+                    4,
+                    tags,
+                    encryptedContent
             );
 
             nip04.setEvent(encrypted_event);
@@ -148,6 +145,34 @@ public class NostrPublisher {
             System.err.println("Error: " + e.getMessage());
             e.printStackTrace();
             return null;
-            }
         }
     }
+
+    public static GenericEvent publishPSBT(PSBT psbt) {
+
+        NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
+        String encryptedContent = nip04.encrypt(poolIdentity, psbt.toString(), poolIdentity.getPublicKey());
+
+        List<BaseTag> tags = new ArrayList<>();
+        tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
+
+        GenericEvent encrypted_event = new GenericEvent(
+                poolIdentity.getPublicKey(),
+                4,
+                tags,
+                encryptedContent
+        );
+
+        nip04.setEvent(encrypted_event);
+        nip04.sign();
+        nip04.send(RELAYS);
+
+        if (encrypted_event != null) {
+            System.out.println("Event ID: " + encrypted_event.getId());
+            System.out.println("Event: " + encrypted_event.toString());
+        }
+
+        return encrypted_event;
+    }
+
+}

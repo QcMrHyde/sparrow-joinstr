@@ -1,6 +1,7 @@
 package com.sparrowwallet.sparrow.joinstr;
 
 import com.google.gson.Gson;
+import com.sparrowwallet.drongo.psbt.PSBT;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolStoreWrapper;
 
@@ -22,6 +23,8 @@ public class JoinstrPool {
     private final SimpleStringProperty peers;
     private final SimpleStringProperty timeout;
     private final String privateKey;
+    private PSBT psbt;
+    private String txId;
     private final SimpleStringProperty status;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -114,4 +117,15 @@ public class JoinstrPool {
 
     }
 
+    public PSBT getPsbt() {
+        return psbt;
+    }
+
+    public void setPsbt(PSBT psbt) {
+        this.psbt = psbt;
+    }
+
+    public String getTxId() {
+        return txId;
+    }
 }
