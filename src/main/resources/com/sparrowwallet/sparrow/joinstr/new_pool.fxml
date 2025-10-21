@@ -21,7 +21,7 @@
     </padding>
     <center>
         <VBox alignment="CENTER" spacing="20">
-            <ImageView fitHeight="200" fitWidth="200" preserveRatio="true">
+            <ImageView fitHeight="100" fitWidth="100" preserveRatio="true">
                 <image>
                     <Image url="@/image/joinstr/joinstr.png"/>
                 </image>
