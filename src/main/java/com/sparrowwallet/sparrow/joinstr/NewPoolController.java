@@ -5,6 +5,7 @@ import static com.sparrowwallet.sparrow.wallet.PaymentController.getRecipientDus
 
 import com.sparrowwallet.drongo.address.Address;
 import com.sparrowwallet.drongo.protocol.ScriptType;
+import com.sparrowwallet.drongo.protocol.SigHash;
 import com.sparrowwallet.drongo.psbt.PSBT;
 import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Payment;
@@ -114,9 +115,6 @@ public class NewPoolController extends JoinstrFormController {
 
                 pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
 
-                getJoinstrController().setSelectedPool(pool);
-                getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
-
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
             }
@@ -140,53 +138,66 @@ public class NewPoolController extends JoinstrFormController {
             Set<BlockTransactionHashIndex> selectedUTXOs = dialog.getSelectedUtxos();
             if(selectedUTXOs != null) {
 
-                ArrayList<Payment> payments = new ArrayList<>();
-                long dustThreshold = getRecipientDustThreshold(bitcoinAddress);
-                long totalAmount = selectedUTXOs.stream().mapToLong(BlockTransactionHashIndex::getValue).sum();
                 long denominationSats = (long)(Double.parseDouble(denomination) * 100000000);
-                while(totalAmount > dustThreshold && totalAmount >= denominationSats) {
-                    Payment payment = new Payment(bitcoinAddress, "joinstr-" + event.getId(), denominationSats, true);
-                    payments.add(payment);
-                    totalAmount = totalAmount - denominationSats;
-                }
+                long totalAmount = selectedUTXOs.stream().mapToLong(BlockTransactionHashIndex::getValue).sum();
+                long minAmount = denominationSats * Long.parseLong(peers);
+                long dustThreshold = getRecipientDustThreshold(bitcoinAddress);
 
-                Set<WalletNode> excludedChangeNodes = new HashSet<>();
-                List<TxoFilter> txoFilters = new ArrayList<>();
-                List<byte[]> opReturns = new ArrayList<>();
+                if(totalAmount >= minAmount && (totalAmount - minAmount == 0 || totalAmount - minAmount > dustThreshold)) {
 
-                double feeRate = 1;
-                double longTermFeeRate = 1;
-                Long userFee = 0L;
+                    ArrayList<Payment> payments = new ArrayList<>();
+                    for(int idx = 0; idx<Integer.parseInt(peers)-1; idx++) {
+                        Payment payment = new Payment(bitcoinAddress, "joinstr-" + event.getId(), denominationSats, true);
+                        payments.add(payment);
+                    }
 
-                Integer currentBlockHeight = AppServices.getCurrentBlockHeight();
-                boolean groupByAddress = Config.get().isGroupByAddress();
-                boolean includeMempoolOutputs = Config.get().isIncludeMempoolOutputs();
+                    Set<WalletNode> excludedChangeNodes = new HashSet<>();
+                    List<TxoFilter> txoFilters = new ArrayList<>();
+                    List<byte[]> opReturns = new ArrayList<>();
 
-                List<UtxoSelector> utxoSelectors = List.of(new PresetUtxoSelector(selectedUTXOs, true, false));
-                wallet.setScriptType(ScriptType.P2WPKH);
+                    double feeRate = 1;
+                    double longTermFeeRate = 1;
+                    Long userFee = 0L;
 
-                WalletTransaction walletTransaction = wallet.createWalletTransaction(utxoSelectors, txoFilters, payments, opReturns, excludedChangeNodes, feeRate, longTermFeeRate, userFee, currentBlockHeight, groupByAddress, includeMempoolOutputs);
-                PSBT psbt = new PSBT(walletTransaction);
+                    Integer currentBlockHeight = AppServices.getCurrentBlockHeight();
+                    boolean groupByAddress = Config.get().isGroupByAddress();
+                    boolean includeMempoolOutputs = Config.get().isIncludeMempoolOutputs();
 
-                GenericEvent psbtEvent = NostrPublisher.publishPSBT(psbt);
+                    List<UtxoSelector> utxoSelectors = List.of(new PresetUtxoSelector(selectedUTXOs, true, false));
+                    wallet.setScriptType(ScriptType.P2WPKH);
 
-                if(psbtEvent.getId() != null && pool != null) {
+                    WalletTransaction walletTransaction = wallet.createWalletTransaction(utxoSelectors, txoFilters, payments, opReturns, excludedChangeNodes, feeRate, longTermFeeRate, userFee, currentBlockHeight, groupByAddress, includeMempoolOutputs);
+                    PSBT psbt = new PSBT(walletTransaction);
+                    psbt.getPsbtInputs().forEach(psbtInput -> psbtInput.setSigHash(SigHash.ANYONECANPAY_ALL));
 
-                    pool.setPsbt(psbt);
+                    GenericEvent psbtEvent = NostrPublisher.publishPSBT(psbt);
 
-                    showSuccessDialog(
-                            "PSBT published",
-                            "PSBT published successfully!\nEvent ID: " + psbtEvent.getId() +
-                                    "\nPSBT: " + psbt.toString()
-                    );
+                    if(psbtEvent.getId() != null && pool != null) {
+
+                        pool.setPsbt(psbt.toString());
+                        System.out.println("PSBT: " + psbt);
+
+                        showSuccessDialog(
+                                "PSBT published",
+                                "PSBT published successfully!\nEvent ID: " + psbtEvent.getId()
+                        );
+
+                    } else {
+                        showError("An error occurred while publishing the PSBT on Nostr.");
+                    }
 
                 } else {
-                    showError("An error occurred while publishing the PSBT on Nostr.");
+                    showError("Selected UTXOs doesn't have enough funds (" + minAmount + " sats)");
                 }
+            } else {
+                showError("No UTXOs selected"); /// TODO: Way to redo process
             }
 
-            if(pool != null)
+            if(pool != null) {
                 updatePoolStore(pool);
+                getJoinstrController().setSelectedPool(pool);
+                getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
+            }
 
 
         } catch (Exception e) {
