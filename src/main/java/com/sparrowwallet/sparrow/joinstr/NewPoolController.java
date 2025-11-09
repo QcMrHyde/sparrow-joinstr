@@ -3,9 +3,7 @@ package com.sparrowwallet.sparrow.joinstr;
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
 import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
-import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
@@ -16,44 +14,8 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.logging.Logger;
 
-import com.sparrowwallet.drongo.BitcoinUnit;
-import com.sparrowwallet.drongo.KeyPurpose;
-import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.protocol.Transaction;
-import com.sparrowwallet.drongo.protocol.TransactionOutput;
-import com.sparrowwallet.drongo.psbt.PSBT;
-import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
-import com.sparrowwallet.drongo.wallet.BnBUtxoSelector;
-import com.sparrowwallet.drongo.wallet.CoinbaseTxoFilter;
-import com.sparrowwallet.drongo.wallet.FrozenTxoFilter;
-import com.sparrowwallet.drongo.wallet.InsufficientFundsException;
-import com.sparrowwallet.drongo.wallet.KnapsackUtxoSelector;
-import com.sparrowwallet.drongo.wallet.Payment;
-import com.sparrowwallet.drongo.wallet.SpentTxoFilter;
-import com.sparrowwallet.drongo.wallet.TxoFilter;
-import com.sparrowwallet.drongo.wallet.UtxoSelector;
-import com.sparrowwallet.drongo.wallet.WalletNode;
-import com.sparrowwallet.drongo.wallet.WalletTransaction;
-import com.sparrowwallet.sparrow.AppServices;
-import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.wallet.NodeEntry;
-
-import org.jetbrains.annotations.NotNull;
-import org.jetbrains.annotations.Unmodifiable;
-
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
-import java.util.TreeSet;
-import java.util.stream.Collectors;
-import java.util.stream.Stream;
-
-import javafx.collections.FXCollections;
-import javafx.collections.ListChangeListener;
-import javafx.collections.ObservableList;
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
+import javafx.scene.control.Alert;
 import javafx.scene.control.TextField;
 
 import nostr.event.impl.GenericEvent;
@@ -197,11 +159,5 @@ public class NewPoolController extends JoinstrFormController {
             logger.info("Received message: " + decryptedMessage);
         });
     }
-    private void showError(String message) {
-        Alert alert = new Alert(AlertType.ERROR);
-        alert.setTitle("Error");
-        alert.setHeaderText(null);
-        alert.setContentText(message);
-        alert.showAndWait();
-    }
+    
 }
