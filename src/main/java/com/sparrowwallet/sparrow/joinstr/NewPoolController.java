@@ -3,7 +3,9 @@ package com.sparrowwallet.sparrow.joinstr;
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
 import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
+import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
@@ -15,7 +17,6 @@ import java.util.Map;
 import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
-import javafx.scene.control.Alert;
 import javafx.scene.control.TextField;
 
 import nostr.event.impl.GenericEvent;
@@ -69,6 +70,7 @@ public class NewPoolController extends JoinstrFormController {
             }
 
             Address bitcoinAddress;
+            Wallet wallet;
             try {
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
                 if (openWallets.isEmpty()) {
@@ -76,7 +78,7 @@ public class NewPoolController extends JoinstrFormController {
                 }
 
                 Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                Wallet wallet = firstWallet.getKey();
+                wallet = firstWallet.getKey();
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
@@ -159,5 +161,5 @@ public class NewPoolController extends JoinstrFormController {
             logger.info("Received message: " + decryptedMessage);
         });
     }
-    
+
 }
