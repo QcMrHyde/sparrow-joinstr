@@ -22,6 +22,8 @@ public class JoinstrPool {
     private final SimpleStringProperty peers;
     private final SimpleStringProperty timeout;
     private final String privateKey;
+    private String psbt;
+    private String txId;
     private final SimpleStringProperty status;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -114,4 +116,15 @@ public class JoinstrPool {
 
     }
 
+    public String getPsbt() {
+        return psbt;
+    }
+
+    public void setPsbt(String psbt) {
+        this.psbt = psbt;
+    }
+
+    public String getTxId() {
+        return txId;
+    }
 }
