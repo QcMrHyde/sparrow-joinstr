@@ -27,6 +27,10 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.sparrowwallet.sparrow.joinstr.JoinPoolHandler;
+import javafx.application.Platform;
+import nostr.base.PublicKey;
+
 public class JoinstrPoolList extends VBox {
 
     private TableView<JoinstrPool> poolTableView;
@@ -166,10 +170,10 @@ public class JoinstrPoolList extends VBox {
 
                             String requestContent = "{\"type\": \"join_pool\"}";
                             List<BaseTag> tags = new ArrayList<>();
-                            tags.add(new PubKeyTag(identity.getPublicKey()));
+                            tags.add(new PubKeyTag(new PublicKey(pool.getPubkey()))); // Send to pool creator's pubkey
 
-                            NIP04 nip04 = new NIP04(identity, identity.getPublicKey());
-                            String encryptedContent = nip04.encrypt(identity, requestContent, identity.getPublicKey());
+                            NIP04 nip04 = new NIP04(identity, new PublicKey(pool.getPubkey())); // Use pool's pubkey
+                            String encryptedContent = nip04.encrypt(identity, requestContent, new PublicKey(pool.getPubkey()));
 
                             GenericEvent encrypted_event = new GenericEvent(
                                     identity.getPublicKey(),
@@ -186,6 +190,13 @@ public class JoinstrPoolList extends VBox {
 
                             pool.setStatus("waiting for credentials");
                             joinButton.setDisable(true);
+
+                            JoinPoolHandler handler = new JoinPoolHandler(identity, pool, status -> {
+                                Platform.runLater(() -> {
+                                    pool.setStatus(status);
+                                });
+                            });
+                            handler.startListeningForCredentials();
                         });
                     }
 
