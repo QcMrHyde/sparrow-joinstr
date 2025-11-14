@@ -66,4 +66,5 @@ open module com.sparrowwallet.sparrow {
     requires nostr.command.handler;
     requires nostr.context;
     requires nostr.context.impl;
+    requires io.github.doblon8.jzbar;
 }
