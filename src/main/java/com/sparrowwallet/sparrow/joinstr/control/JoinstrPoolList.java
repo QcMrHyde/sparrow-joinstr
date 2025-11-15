@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
+import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
@@ -20,11 +21,13 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
 
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.Consumer;
 
 public class JoinstrPoolList extends VBox {
@@ -66,12 +69,12 @@ public class JoinstrPoolList extends VBox {
         peersColumn.setPrefWidth(50);
 
         TableColumn<JoinstrPool, String> timeoutColumn = new TableColumn<>("Timeout");
-        timeoutColumn.setCellValueFactory(new PropertyValueFactory<>("timeout"));
-        timeoutColumn.setPrefWidth(100);
+        timeoutColumn.setCellValueFactory(new PropertyValueFactory<>("timeoutDate"));
+        timeoutColumn.setPrefWidth(170);
 
         TableColumn<JoinstrPool, String> statusColumn = new TableColumn<>("Status");
         statusColumn.setCellValueFactory(param -> param.getValue().statusProperty());
-        statusColumn.setPrefWidth(150);
+        statusColumn.setPrefWidth(130);
 
         poolTableView.getColumns().addAll(
                 relayColumn,
@@ -214,6 +217,18 @@ public class JoinstrPoolList extends VBox {
     }
     public void clearPools() {
         poolData.clear();
+    }
+
+    public void filterOutdatedPools(boolean outdated) {
+        filteredData.setPredicate(pool ->
+                (outdated && Long.parseLong(pool.getTimeout()) <= Instant.now().getEpochSecond()) || (!outdated && Long.parseLong(pool.getTimeout()) > Instant.now().getEpochSecond())
+        );
+    }
+
+    public void filterCreatedPools() {
+        filteredData.setPredicate(pool ->
+                Config.get().getPoolStore().stream().noneMatch(ps -> Objects.equals(ps.getPubkey(), pool.getPubkey()))
+        );
     }
 
     public void filterPools(String searchText) {

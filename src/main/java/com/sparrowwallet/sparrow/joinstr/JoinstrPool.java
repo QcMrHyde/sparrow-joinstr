@@ -8,8 +8,11 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.FileWriter;
 import java.io.IOException;
+import java.time.Instant;
 import java.util.*;
 
+import javafx.beans.property.ObjectProperty;
+import javafx.beans.property.SimpleObjectProperty;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.stage.FileChooser;
 import nostr.id.Identity;
@@ -24,6 +27,11 @@ public class JoinstrPool {
     private final String privateKey;
     private final SimpleStringProperty status;
 
+    private final SimpleObjectProperty<Date> timeoutDate;
+    public ObjectProperty<Date> timeoutDateProperty() {
+        return timeoutDate;
+    }
+
     public JoinstrPool(String relay, String pubkey, String denomination,
                        String peers, String timeout) {
         this.relay = new SimpleStringProperty(relay);
@@ -31,6 +39,7 @@ public class JoinstrPool {
         this.denomination = new SimpleStringProperty(denomination);
         this.peers = new SimpleStringProperty(peers);
         this.timeout = new SimpleStringProperty(timeout);
+        this.timeoutDate = new SimpleObjectProperty<>(Date.from(Instant.ofEpochSecond(Long.parseLong(timeout))));
         this.privateKey = "";
         this.status = new SimpleStringProperty("");
     }
@@ -42,6 +51,7 @@ public class JoinstrPool {
         this.denomination = new SimpleStringProperty(denomination);
         this.peers = new SimpleStringProperty(peers);
         this.timeout = new SimpleStringProperty(timeout);
+        this.timeoutDate = new SimpleObjectProperty<>(Date.from(Instant.ofEpochSecond(Long.parseLong(timeout))));
         this.privateKey = privateKey;
         this.status = new SimpleStringProperty("");
     }
