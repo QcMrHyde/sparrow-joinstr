@@ -49,6 +49,7 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 double denominationValue = Double.parseDouble(denomination);
+                denomination = String.format("%.8s", denominationValue);
                 if (denominationValue <= 0) {
                     showError("Denomination must be greater than zero");
                     return;
