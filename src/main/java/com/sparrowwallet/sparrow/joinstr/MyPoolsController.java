@@ -96,7 +96,7 @@ public class MyPoolsController extends JoinstrFormController {
 
     private void addPoolStoreData() {
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-        boolean pollStoreChanged = false;
+        boolean poolStoreChanged = false;
 
         clearPoolList();
         for (JoinstrPool pool: pools) {
@@ -106,11 +106,11 @@ public class MyPoolsController extends JoinstrFormController {
             } else {
                 pool.stopListeningForCredentials();
                 pools.remove(pool);
-                pollStoreChanged = true;
+                poolStoreChanged = true;
             }
         }
 
-        if(pollStoreChanged)
+        if(poolStoreChanged)
             Config.get().setPoolStore(pools);
 
     }

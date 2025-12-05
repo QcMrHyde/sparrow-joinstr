@@ -10,7 +10,6 @@ import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import javafx.application.Platform;
 import nostr.api.NIP04;
-import nostr.base.PublicKey;
 import nostr.event.BaseTag;
 import nostr.event.impl.GenericEvent;
 import nostr.event.Kind;
@@ -21,6 +20,7 @@ import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.TimeoutException;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -36,7 +36,7 @@ public class JoinPoolHandler {
     private List<String> outputAddresses = new CopyOnWriteArrayList<>();
     private int numPeers;
     private Consumer<String> statusCallback;
-    private boolean isOutputRegistered = false;
+    private AtomicBoolean isOutputRegistered;
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
@@ -44,6 +44,7 @@ public class JoinPoolHandler {
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
         this.numPeers = Integer.parseInt(pool.getPeers());
+        this.isOutputRegistered = new AtomicBoolean(false);
     }
 
     public int getConnectedPeers() {
@@ -54,12 +55,13 @@ public class JoinPoolHandler {
      * Start listening for credentials after sending join request
      */
     public void startListeningForCredentials() {
+
         Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered) {
+            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
                 handleCredentialsReceived(decryptedMessage);
             }
         });
@@ -68,13 +70,16 @@ public class JoinPoolHandler {
         new Thread(() -> {
             try {
                 Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
-                credentialsListener.stop();
                 MyPoolsController.clearPoolList();
-                System.out.println("Pool expired, stopping listener");
+                logger.info("Pool expired, stopping listener");
             } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (TimeoutException e) {
-                throw new RuntimeException(e);
+                logger.warning("Error stopping listening thread: " + e.getMessage());
+            } finally {
+                try {
+                    credentialsListener.stop();
+                } catch (TimeoutException e) {
+                    logger.warning("Error stopping credentials listener: " + e.getMessage());
+                }
             }
         }).start();
 
@@ -85,8 +90,6 @@ public class JoinPoolHandler {
      */
     private void handleCredentialsReceived(String credentialsJson) {
         try {
-
-            logger.info("Received credentials: " + credentialsJson);    // TODO: Delete line, for Debug only
 
             Gson gson = new Gson();
             Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
@@ -171,7 +174,7 @@ public class JoinPoolHandler {
             outputAddresses.add(myOutputAddress.toString());
 
             Platform.runLater(() -> statusCallback.accept("Output registered"));
-            isOutputRegistered = true;
+            isOutputRegistered.set(true);
 
             listenForOutputs();
 
@@ -198,13 +201,16 @@ public class JoinPoolHandler {
         new Thread(() -> {
             try {
                 Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
-                poolMessageListener.stop();
                 MyPoolsController.clearPoolList();
-                System.out.println("Pool expired, stopping listener");
+                logger.info("Pool expired, stopping listener");
             } catch (InterruptedException e) {
-                e.printStackTrace();
-            } catch (TimeoutException e) {
-                throw new RuntimeException(e);
+                logger.warning("Error stopping listening thread: " + e.getMessage());
+            } finally {
+                try {
+                    poolMessageListener.stop();
+                } catch (TimeoutException e) {
+                    logger.warning("Error stopping credentials listener: " + e.getMessage());
+                }
             }
         }).start();
     }

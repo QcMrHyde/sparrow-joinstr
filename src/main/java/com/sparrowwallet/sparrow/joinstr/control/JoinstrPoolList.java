@@ -22,7 +22,6 @@ import javafx.scene.layout.VBox;
 import javafx.util.Callback;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
@@ -32,8 +31,6 @@ import java.util.Map;
 import java.util.TimeZone;
 import java.util.function.Consumer;
 
-import com.sparrowwallet.sparrow.joinstr.JoinPoolHandler;
-import javafx.application.Platform;
 import nostr.base.PublicKey;
 
 public class JoinstrPoolList extends VBox {
@@ -238,12 +235,7 @@ public class JoinstrPoolList extends VBox {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
     public void clearPools() {
-        poolTableView = new TableView<>();
-        poolTableView.getStyleClass().add("joinstr-list-tableview");
         poolData.clear();
-        filteredData = new FilteredList<>(poolData, p -> true);
-        poolTableView.setItems(filteredData);
-        poolTableView.refresh();
     }
 
     public void filterPools(String searchText) {
