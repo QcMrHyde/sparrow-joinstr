@@ -3,9 +3,7 @@ package com.sparrowwallet.sparrow.joinstr;
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
 import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
-import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
