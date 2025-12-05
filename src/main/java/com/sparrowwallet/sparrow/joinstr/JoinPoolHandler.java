@@ -17,9 +17,11 @@ import nostr.event.Kind;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -33,6 +35,7 @@ public class JoinPoolHandler {
     private Identity poolIdentity;
     private int numPeers;
     private Consumer<String> statusCallback;
+    private boolean isOutputRegistered = false;
     private CoinjoinHandler coinjoinHandler;
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
@@ -40,29 +43,11 @@ public class JoinPoolHandler {
         this.pool = pool;
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
+        this.numPeers = Integer.parseInt(pool.getPeers());
+    }
 
-        String peersStr = pool.getPeers();
-        try {
-            if (peersStr == null || peersStr.trim().isEmpty()) {
-                throw new IllegalArgumentException("Pool peers data is null or empty");
-            }
-            if (peersStr.contains("/")) {
-                String[] parts = peersStr.split("/");
-                if (parts.length < 2) {
-                    throw new IllegalArgumentException(
-                            "Invalid peers format: expected 'current/total', got: " + peersStr);
-                }
-                this.numPeers = Integer.parseInt(parts[1].trim());
-            } else {
-                this.numPeers = Integer.parseInt(peersStr.trim());
-            }
-        } catch (NumberFormatException e) {
-            logger.severe("Failed to parse peers count from pool data: " + peersStr);
-            throw new IllegalArgumentException("Invalid peers count format: " + peersStr, e);
-        } catch (IllegalArgumentException e) {
-            logger.severe("Invalid pool peers data: " + e.getMessage());
-            throw e;
-        }
+    public int getConnectedPeers() {
+        return 0; // TODO fix, was "outputAddresses.size();"
     }
 
     /**
@@ -74,10 +59,25 @@ public class JoinPoolHandler {
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"")) {
+            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered) {
                 handleCredentialsReceived(decryptedMessage);
             }
         });
+
+        // Schedule thread to stop listening after pool timeout
+        new Thread(() -> {
+            try {
+                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
+                credentialsListener.stop();
+                MyPoolsController.clearPoolList();
+                System.out.println("Pool expired, stopping listener");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (TimeoutException e) {
+                throw new RuntimeException(e);
+            }
+        }).start();
+
     }
 
     /**
@@ -92,7 +92,8 @@ public class JoinPoolHandler {
         }
 
         try {
-            logger.info("Received credentials: " + credentialsJson);
+
+            logger.info("Received credentials: " + credentialsJson);    // TODO: Delete line, for Debug only
 
             Gson gson = new Gson();
             Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
@@ -130,7 +131,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error " + e.getMessage()));
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
@@ -143,8 +144,7 @@ public class JoinPoolHandler {
             if (openWallets.isEmpty()) {
                 throw new IllegalStateException("No wallet found");
             }
-            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> firstWallet = openWallets.entrySet().iterator()
-                    .next();
+            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
             com.sparrowwallet.drongo.wallet.Wallet wallet = firstWallet.getKey();
             Storage storage = firstWallet.getValue();
 

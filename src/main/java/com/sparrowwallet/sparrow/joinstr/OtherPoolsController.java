@@ -134,16 +134,12 @@ public class OtherPoolsController extends JoinstrFormController {
                                                 return;
                                             }
 
-                                            String formattedTimeout = Instant.ofEpochSecond(timeout)
-                                                    .atZone(ZoneOffset.UTC)
-                                                    .format(DateTimeFormatter.ofPattern("HH:mm:ss z"));
-
                                             JoinstrPool pool = new JoinstrPool(
                                                     poolData.get("relay").asText(),
                                                     poolData.get("public_key").asText(),
                                                     poolData.get("denomination").asText() + " BTC",
-                                                    "0/" + poolData.get("peers").asText(),
-                                                    formattedTimeout
+                                                    poolData.get("peers").asText(),
+                                                    String.valueOf(timeout)
                                             );
 
                                             if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&

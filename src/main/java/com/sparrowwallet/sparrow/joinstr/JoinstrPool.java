@@ -10,6 +10,7 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 
+import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.stage.FileChooser;
 import nostr.id.Identity;
@@ -23,6 +24,7 @@ public class JoinstrPool {
     private final SimpleStringProperty timeout;
     private final String privateKey;
     private final SimpleStringProperty status;
+    private JoinPoolHandler handler;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
                        String peers, String timeout) {
@@ -44,12 +46,21 @@ public class JoinstrPool {
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = privateKey;
         this.status = new SimpleStringProperty("");
+
     }
 
     public String getRelay() { return relay.get(); }
     public String getPubkey() { return pubkey.get(); }
     public String getDenomination() { return denomination.get(); }
     public String getPeers() { return peers.get(); }
+    public String getPeersStatus() {
+        String connectedPeers = "0";
+        if(this.handler != null) {
+            connectedPeers = String.valueOf(handler.getConnectedPeers());
+        }
+        return connectedPeers + "/" + peers.get();
+    }
+
     public String getTimeout() { return timeout.get(); }
     public Identity getJoinstrIdentity() { return Identity.create(privateKey); }
 
@@ -112,6 +123,21 @@ public class JoinstrPool {
         writer.write(poolsJson);
         writer.close();
 
+    }
+
+    public void startListeningForCredentials(Identity identity) {
+
+        setStatus("waiting for credentials");
+        this.handler = new JoinPoolHandler(identity, this, status -> {
+            Platform.runLater(() -> {
+                setStatus(status);
+            });
+        });
+        handler.startListeningForCredentials();
+    }
+
+    public void stopListeningForCredentials() {
+        if(handler != null) handler.stop();
     }
 
 }
