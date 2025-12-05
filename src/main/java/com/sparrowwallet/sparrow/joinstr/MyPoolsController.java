@@ -25,7 +25,7 @@ public class MyPoolsController extends JoinstrFormController {
     @FXML
     private TextField searchTextField;
 
-    private JoinstrPoolList joinstrPoolList;
+    private static JoinstrPoolList joinstrPoolList;
     private JoinstrInfoPane joinstrInfoPane;
 
     @Override
@@ -96,14 +96,15 @@ public class MyPoolsController extends JoinstrFormController {
 
     private void addPoolStoreData() {
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-        Boolean pollStoreChanged = false;
+        boolean pollStoreChanged = false;
 
-        joinstrPoolList.clearPools();
+        clearPoolList();
         for (JoinstrPool pool: pools) {
             long timeout = Long.parseLong(pool.getTimeout());
             if (timeout >= Instant.now().getEpochSecond()) {
                 joinstrPoolList.addPool(pool);
             } else {
+                pool.stopListeningForCredentials();
                 pools.remove(pool);
                 pollStoreChanged = true;
             }
@@ -122,6 +123,10 @@ public class MyPoolsController extends JoinstrFormController {
         if(e.getSource()==searchTextField) {
             System.out.println(searchTextField.getText());
         };
+    }
+
+    public static void clearPoolList() {
+        joinstrPoolList.clearPools();
     }
 
 }

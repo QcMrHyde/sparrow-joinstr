@@ -17,8 +17,10 @@ import nostr.event.Kind;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.TimeoutException;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -34,19 +36,18 @@ public class JoinPoolHandler {
     private List<String> outputAddresses = new CopyOnWriteArrayList<>();
     private int numPeers;
     private Consumer<String> statusCallback;
+    private boolean isOutputRegistered = false;
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
         this.pool = pool;
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
+        this.numPeers = Integer.parseInt(pool.getPeers());
+    }
 
-        String peersStr = pool.getPeers();
-        if (peersStr.contains("/")) {
-            this.numPeers = Integer.parseInt(peersStr.split("/")[1]);
-        } else {
-            this.numPeers = Integer.parseInt(peersStr);
-        }
+    public int getConnectedPeers() {
+        return outputAddresses.size();
     }
 
     /**
@@ -58,10 +59,25 @@ public class JoinPoolHandler {
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"")) {
+            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered) {
                 handleCredentialsReceived(decryptedMessage);
             }
         });
+
+        // Schedule thread to stop listening after pool timeout
+        new Thread(() -> {
+            try {
+                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
+                credentialsListener.stop();
+                MyPoolsController.clearPoolList();
+                System.out.println("Pool expired, stopping listener");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (TimeoutException e) {
+                throw new RuntimeException(e);
+            }
+        }).start();
+
     }
 
     /**
@@ -69,7 +85,8 @@ public class JoinPoolHandler {
      */
     private void handleCredentialsReceived(String credentialsJson) {
         try {
-            logger.info("Received credentials: " + credentialsJson);
+
+            logger.info("Received credentials: " + credentialsJson);    // TODO: Delete line, for Debug only
 
             Gson gson = new Gson();
             Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
@@ -107,7 +124,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error" + e.getMessage()));
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
@@ -154,13 +171,14 @@ public class JoinPoolHandler {
             outputAddresses.add(myOutputAddress.toString());
 
             Platform.runLater(() -> statusCallback.accept("Output registered"));
+            isOutputRegistered = true;
 
             listenForOutputs();
 
         } catch (Exception e) {
             logger.severe("Error registering output: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error" + e.getMessage()));
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
@@ -171,10 +189,24 @@ public class JoinPoolHandler {
         poolMessageListener = new NostrListener(poolIdentity, relay, null);
 
         poolMessageListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"type\": \"output\"")) {
+            if (decryptedMessage.contains("\"type\":\"output\"")) {
                 handleOutputReceived(decryptedMessage);
             }
         });
+
+        // Schedule thread to stop listening after pool timeout
+        new Thread(() -> {
+            try {
+                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
+                poolMessageListener.stop();
+                MyPoolsController.clearPoolList();
+                System.out.println("Pool expired, stopping listener");
+            } catch (InterruptedException e) {
+                e.printStackTrace();
+            } catch (TimeoutException e) {
+                throw new RuntimeException(e);
+            }
+        }).start();
     }
 
     private void handleOutputReceived(String decryptedMessage) {
@@ -192,6 +224,7 @@ public class JoinPoolHandler {
 
                 if (outputAddresses.size() >= numPeers) {
                     Platform.runLater(() -> statusCallback.accept("Input registration"));
+                    stop();
                 }
             }
         } catch (Exception e) {

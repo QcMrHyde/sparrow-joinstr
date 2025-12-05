@@ -12,7 +12,10 @@ import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -49,7 +52,8 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 double denominationValue = Double.parseDouble(denomination);
-                denomination = String.format("%.8s", denominationValue);
+                DecimalFormat df = new DecimalFormat("#.########", DecimalFormatSymbols.getInstance(Locale.US));
+                denomination = df.format(denominationValue);
                 if (denominationValue <= 0) {
                     showError("Denomination must be greater than zero");
                     return;
@@ -107,6 +111,9 @@ public class NewPoolController extends JoinstrFormController {
 
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
+
+                Identity identity = Identity.generateRandomIdentity();
+                pool.startListeningForCredentials(identity);
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());

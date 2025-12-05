@@ -3,6 +3,7 @@ package com.sparrowwallet.sparrow.joinstr.control;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
+import javafx.beans.property.SimpleStringProperty;
 import nostr.id.Identity;
 import nostr.event.BaseTag;
 import nostr.event.tag.PubKeyTag;
@@ -20,11 +21,15 @@ import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
 
+import java.time.Instant;
+import java.time.ZoneOffset;
+import java.time.format.DateTimeFormatter;
 import java.util.Comparator;
 import java.util.List;
 import java.util.ArrayList;
 
 import java.util.Map;
+import java.util.TimeZone;
 import java.util.function.Consumer;
 
 import com.sparrowwallet.sparrow.joinstr.JoinPoolHandler;
@@ -66,11 +71,26 @@ public class JoinstrPoolList extends VBox {
         denominationColumn.setPrefWidth(100);
 
         TableColumn<JoinstrPool, String> peersColumn = new TableColumn<>("Peers");
-        peersColumn.setCellValueFactory(new PropertyValueFactory<>("peers"));
+        peersColumn.setCellValueFactory(cellData -> {
+            JoinstrPool pool = cellData.getValue();
+            String peersStatus = pool.getPeersStatus();
+            return new SimpleStringProperty(peersStatus);
+        });
         peersColumn.setPrefWidth(50);
 
         TableColumn<JoinstrPool, String> timeoutColumn = new TableColumn<>("Timeout");
-        timeoutColumn.setCellValueFactory(new PropertyValueFactory<>("timeout"));
+        timeoutColumn.setCellValueFactory(cellData -> {
+            String formattedTimeout = "";
+            try {
+                TimeZone tz = TimeZone.getDefault();
+                formattedTimeout = Instant.ofEpochSecond(Long.parseLong(cellData.getValue().getTimeout()))
+                        .atZone(tz.toZoneId())
+                        .format(DateTimeFormatter.ofPattern("HH:mm:ss z"));
+            } catch (Exception e) {
+                formattedTimeout = cellData.getValue().getTimeout();
+            }
+            return new SimpleStringProperty(formattedTimeout);
+        });
         timeoutColumn.setPrefWidth(100);
 
         TableColumn<JoinstrPool, String> statusColumn = new TableColumn<>("Status");
@@ -104,7 +124,7 @@ public class JoinstrPoolList extends VBox {
                     } else if (column == denominationColumn) {
                         columnComparator = Comparator.comparing(JoinstrPool::getDenomination, String.CASE_INSENSITIVE_ORDER);
                     } else if (column == peersColumn) {
-                        columnComparator = Comparator.comparing(JoinstrPool::getPeers, String.CASE_INSENSITIVE_ORDER);
+                        columnComparator = Comparator.comparing(JoinstrPool::getPeersStatus, String.CASE_INSENSITIVE_ORDER);
                     } else if (column == timeoutColumn) {
                         columnComparator = Comparator.comparing(JoinstrPool::getTimeout, String.CASE_INSENSITIVE_ORDER);
                     }
@@ -168,12 +188,13 @@ public class JoinstrPoolList extends VBox {
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
                             qrDialog.showAndWait();
 
+                            PublicKey poolPubKey = new PublicKey(pool.getPubkey());
                             String requestContent = "{\"type\": \"join_pool\"}";
                             List<BaseTag> tags = new ArrayList<>();
-                            tags.add(new PubKeyTag(new PublicKey(pool.getPubkey()))); // Send to pool creator's pubkey
+                            tags.add(new PubKeyTag(poolPubKey)); // Send to pool creator's pubkey
 
-                            NIP04 nip04 = new NIP04(identity, new PublicKey(pool.getPubkey())); // Use pool's pubkey
-                            String encryptedContent = nip04.encrypt(identity, requestContent, new PublicKey(pool.getPubkey()));
+                            NIP04 nip04 = new NIP04(identity, poolPubKey); // Use pool's pubkey
+                            String encryptedContent = nip04.encrypt(identity, requestContent, poolPubKey);
 
                             GenericEvent encrypted_event = new GenericEvent(
                                     identity.getPublicKey(),
@@ -187,16 +208,9 @@ public class JoinstrPoolList extends VBox {
                             nip04.send(Map.of("nos", pool.getRelay()));
 
                             System.out.println("Join request sent. Event ID:: " + encrypted_event.getId());
-
-                            pool.setStatus("waiting for credentials");
                             joinButton.setDisable(true);
+                            pool.startListeningForCredentials(identity);
 
-                            JoinPoolHandler handler = new JoinPoolHandler(identity, pool, status -> {
-                                Platform.runLater(() -> {
-                                    pool.setStatus(status);
-                                });
-                            });
-                            handler.startListeningForCredentials();
                         });
                     }
 
@@ -224,7 +238,12 @@ public class JoinstrPoolList extends VBox {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
     public void clearPools() {
+        poolTableView = new TableView<>();
+        poolTableView.getStyleClass().add("joinstr-list-tableview");
         poolData.clear();
+        filteredData = new FilteredList<>(poolData, p -> true);
+        poolTableView.setItems(filteredData);
+        poolTableView.refresh();
     }
 
     public void filterPools(String searchText) {
