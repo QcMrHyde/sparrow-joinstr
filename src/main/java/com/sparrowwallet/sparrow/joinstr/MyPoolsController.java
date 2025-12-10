@@ -99,13 +99,13 @@ public class MyPoolsController extends JoinstrFormController {
         boolean poolStoreChanged = false;
 
         clearPoolList();
-        for (JoinstrPool pool: pools) {
-            long timeout = Long.parseLong(pool.getTimeout());
+        for (int idx=0; idx<pools.size(); idx++) {
+            long timeout = Long.parseLong(pools.get(idx).getTimeout());
             if (timeout >= Instant.now().getEpochSecond()) {
-                joinstrPoolList.addPool(pool);
+                joinstrPoolList.addPool(pools.get(idx));
             } else {
-                pool.stopListeningForCredentials();
-                pools.remove(pool);
+                pools.get(idx).stopListeningForCredentials();
+                pools.remove(pools.get(idx));
                 poolStoreChanged = true;
             }
         }
