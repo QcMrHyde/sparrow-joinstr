@@ -25,13 +25,12 @@ public class MyPoolsController extends JoinstrFormController {
     @FXML
     private TextField searchTextField;
 
-    private static JoinstrPoolList joinstrPoolList;
+    private static final JoinstrPoolList joinstrPoolList = new JoinstrPoolList();
     private JoinstrInfoPane joinstrInfoPane;
 
     @Override
     public void initializeView() {
         try {
-            joinstrPoolList = new JoinstrPoolList();
 
             // Add pool store data
             addPoolStoreData();
