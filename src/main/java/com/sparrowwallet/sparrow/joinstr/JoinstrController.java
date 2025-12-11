@@ -129,6 +129,10 @@ public class JoinstrController extends JoinstrFormController {
 
     }
 
+    public Stage getStage() {
+        return this.stage;
+    }
+
     public void setStage(Stage stage) {
         this.stage = stage;
     }
