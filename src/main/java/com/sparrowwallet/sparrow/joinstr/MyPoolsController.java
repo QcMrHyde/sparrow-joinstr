@@ -105,6 +105,7 @@ public class MyPoolsController extends JoinstrFormController {
             } else {
                 pools.get(idx).stopListeningForCredentials();
                 pools.remove(pools.get(idx));
+                idx--;
                 poolStoreChanged = true;
             }
         }
