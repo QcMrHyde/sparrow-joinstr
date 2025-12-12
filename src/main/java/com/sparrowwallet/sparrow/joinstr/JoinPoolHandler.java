@@ -130,7 +130,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error" + e.getMessage()));
+            Platform.runLater(() -> statusCallback.accept("Error " + e.getMessage()));
         }
     }
 
@@ -183,7 +183,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error registering output: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error" + e.getMessage()));
+            Platform.runLater(() -> statusCallback.accept("Error " + e.getMessage()));
         }
     }
 

@@ -175,10 +175,11 @@ public class JoinstrPoolList extends VBox {
 
                             String requestContent = "{\"type\": \"join_pool\"}";
                             List<BaseTag> tags = new ArrayList<>();
-                            tags.add(new PubKeyTag(new PublicKey(pool.getPubkey()))); // Send to pool creator's pubkey
+                            PublicKey poolPublicKey = new PublicKey(pool.getPubkey());
+                            tags.add(new PubKeyTag(poolPublicKey));
 
-                            NIP04 nip04 = new NIP04(identity, new PublicKey(pool.getPubkey())); // Use pool's pubkey
-                            String encryptedContent = nip04.encrypt(identity, requestContent, new PublicKey(pool.getPubkey()));
+                            NIP04 nip04 = new NIP04(identity, poolPublicKey);
+                            String encryptedContent = nip04.encrypt(identity, requestContent, poolPublicKey);
 
                             GenericEvent encrypted_event = new GenericEvent(
                                     identity.getPublicKey(),
