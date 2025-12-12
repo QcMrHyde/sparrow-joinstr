@@ -19,6 +19,7 @@ import nostr.id.Identity;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -82,7 +83,14 @@ public class JoinPoolHandler {
     /**
      * Handle received pool credentials
      */
+    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
+
     private void handleCredentialsReceived(String credentialsJson) {
+    if (!credentialsReceived.compareAndSet(false, true)) {
+        logger.warning("Credentials already received, ignoring duplicate message");
+        return;
+    }
+ 
         try {
             logger.info("Received credentials: " + credentialsJson);
 
