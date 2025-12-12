@@ -205,7 +205,8 @@ public class JoinPoolHandler {
                         "Waiting for peers"
                 ));
 
-                if (outputAddresses.size() >= numPeers) {
+                int currentSize = outputAddresses.size();
+                if (currentSize == numPeers) {
                     Platform.runLater(() -> statusCallback.accept("Input registration"));
                 }
             }
