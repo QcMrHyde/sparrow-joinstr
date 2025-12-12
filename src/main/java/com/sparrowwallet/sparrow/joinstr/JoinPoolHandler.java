@@ -144,7 +144,7 @@ public class JoinPoolHandler {
             Address myOutputAddress = freshEntry.getAddress();
 
             String outputContent = String.format(
-                    "{\"type\":\"output\",\"address\":\"%s\"}",
+                    "{\"type\": \"output\",\"address\":\"%s\"}",
                     myOutputAddress.toString()
             );
 
@@ -186,7 +186,7 @@ public class JoinPoolHandler {
         poolMessageListener = new NostrListener(poolIdentity, relay, null);
 
         poolMessageListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"type\": \"output\"")) {
+            if (decryptedMessage.contains("\"type\":\"output\"")) {
                 handleOutputReceived(decryptedMessage);
             }
         });
