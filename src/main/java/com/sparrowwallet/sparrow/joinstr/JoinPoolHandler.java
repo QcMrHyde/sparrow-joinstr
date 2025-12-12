@@ -42,10 +42,25 @@ public class JoinPoolHandler {
         this.statusCallback = statusCallback;
 
         String peersStr = pool.getPeers();
-        if (peersStr.contains("/")) {
-            this.numPeers = Integer.parseInt(peersStr.split("/")[1]);
-        } else {
-            this.numPeers = Integer.parseInt(peersStr);
+        try {
+            if (peersStr == null || peersStr.trim().isEmpty()) {
+                throw new IllegalArgumentException("Pool peers data is null or empty");
+            }
+            if (peersStr.contains("/")) {
+                String[] parts = peersStr.split("/");
+                if (parts.length < 2) {
+                    throw new IllegalArgumentException("Invalid peers format: expected 'current/total', got: " + peersStr);
+                }
+                this.numPeers = Integer.parseInt(parts[1].trim());
+            } else {
+                this.numPeers = Integer.parseInt(peersStr.trim());
+            }
+        } catch (NumberFormatException e) {
+            logger.severe("Failed to parse peers count from pool data: " + peersStr);
+            throw new IllegalArgumentException("Invalid peers count format: " + peersStr, e);
+        } catch (IllegalArgumentException e) {
+            logger.severe("Invalid pool peers data: " + e.getMessage());
+            throw e;
         }
     }
 
