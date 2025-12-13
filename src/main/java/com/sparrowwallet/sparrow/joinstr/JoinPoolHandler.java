@@ -34,9 +34,9 @@ import java.util.logging.Logger;
 public class JoinPoolHandler {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
 
-    private Identity joinIdentity;
+    private final Identity joinIdentity;
     private JoinstrPool pool;
-    private String relay;
+    private final String relay;
     private NostrListener credentialsListener;
     private Identity poolIdentity;
     private int numPeers;
@@ -267,8 +267,7 @@ public class JoinPoolHandler {
     }
 
     private void shutdownThreads() {
-        stop();
-        if (threadPool != null && !threadPool.isShutdown()) {
+        if (!threadPool.isShutdown()) {
             threadPool.shutdown();
 
             try {
@@ -291,6 +290,7 @@ public class JoinPoolHandler {
             if (coinjoinHandler != null) {
                 coinjoinHandler.stopListening();
             }
+            shutdownThreads();
         } catch (Exception e) {
             logger.warning("Error stopping listeners: " + e.getMessage());
         }

@@ -82,10 +82,8 @@ public class OtherPoolsController extends JoinstrFormController {
             fetchPools();
 
         } catch (Exception e) {
-            if(e != null) {
-                logger.severe("Error initializing view: " + e.getMessage());
-                e.printStackTrace();
-            }
+            logger.severe("Error initializing view: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
@@ -182,12 +180,17 @@ public class OtherPoolsController extends JoinstrFormController {
                 context.setPrivateKey(identity.getPrivateKey().getRawData());
                 context.setRelays(Map.of("default", DEFAULT_RELAY));
 
-                client.connect(context);
-                client.send(reqMessage);
+                try {
+                    client.connect(context);
+                    client.send(reqMessage);
 
-                Thread.sleep(5000);
+                    Thread.sleep(5000);
 
-                client.disconnect();
+                } catch (InterruptedException e) {
+                    logger.warning("Sleep interrupted: " + e.getMessage());
+                } finally {
+                    client.disconnect();
+                }
 
                 textLogger.removeHandler(eventHandler);
 
