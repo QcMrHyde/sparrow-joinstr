@@ -110,8 +110,7 @@ public class NewPoolController extends JoinstrFormController {
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
 
-                Identity identity = Identity.generateRandomIdentity();
-                pool.startListeningForCredentials(identity);
+                pool.startListeningForCredentials(pool.getJoinstrIdentity());
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
