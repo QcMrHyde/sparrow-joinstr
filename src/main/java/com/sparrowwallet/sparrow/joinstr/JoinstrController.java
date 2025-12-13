@@ -6,8 +6,10 @@ import com.sparrowwallet.sparrow.io.Config;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Locale;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -34,6 +36,12 @@ public class JoinstrController extends JoinstrFormController {
     private ToggleGroup joinstrMenu;
 
     private JoinstrPool selectedPool;
+
+    protected ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
+        Thread t = Executors.defaultThreadFactory().newThread(r);
+        t.setDaemon(true);
+        return t;
+    });
 
     public JoinstrController() {
 
@@ -137,8 +145,24 @@ public class JoinstrController extends JoinstrFormController {
         this.stage = stage;
     }
 
-    public void close(ActionEvent event) {
+    public void close() {
+        shutdownThreads();
         stage.close();
+    }
+
+    private void shutdownThreads() {
+        if (threadPool != null && !threadPool.isShutdown()) {
+            threadPool.shutdown();
+
+            try {
+                if (!threadPool.awaitTermination(3, TimeUnit.SECONDS)) {
+                    threadPool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                threadPool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
+        }
     }
 
 }

@@ -584,6 +584,9 @@ public class AppController implements Initializable {
                 stage.setOnShowing(event -> {
                     AppServices.moveToActiveWindowScreen(stage, 600, 460);
                 });
+                stage.setOnCloseRequest(event -> {
+                    joinstrController.close();
+                });
             } else {
                 stage = joinstrController.getStage();
             }
