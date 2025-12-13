@@ -25,7 +25,7 @@ public class MyPoolsController extends JoinstrFormController {
     @FXML
     private TextField searchTextField;
 
-    private static final JoinstrPoolList joinstrPoolList = new JoinstrPoolList();
+    private final JoinstrPoolList joinstrPoolList = new JoinstrPoolList();
     private JoinstrInfoPane joinstrInfoPane;
 
     @Override
@@ -125,7 +125,7 @@ public class MyPoolsController extends JoinstrFormController {
         };
     }
 
-    public static void clearPoolList() {
+    public void clearPoolList() {
         joinstrPoolList.clearPools();
     }
 
