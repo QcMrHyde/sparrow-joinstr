@@ -37,7 +37,7 @@ public class JoinstrController extends JoinstrFormController {
 
     private JoinstrPool selectedPool;
 
-    protected ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
+    protected final ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
         Thread t = Executors.defaultThreadFactory().newThread(r);
         t.setDaemon(true);
         return t;
@@ -151,7 +151,7 @@ public class JoinstrController extends JoinstrFormController {
     }
 
     private void shutdownThreads() {
-        if (threadPool != null && !threadPool.isShutdown()) {
+        if (!threadPool.isShutdown()) {
             threadPool.shutdown();
 
             try {

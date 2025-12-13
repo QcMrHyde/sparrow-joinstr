@@ -33,20 +33,18 @@ import java.util.logging.Logger;
 public class JoinPoolHandler {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
 
-    private Identity joinIdentity;
+    private final Identity joinIdentity;
     private JoinstrPool pool;
-    private String relay;
+    private final String relay;
     private NostrListener credentialsListener;
     private NostrListener poolMessageListener;
     private Identity poolIdentity;
-    private List<String> outputAddresses = new CopyOnWriteArrayList<>();
-    private int numPeers;
-    private Consumer<String> statusCallback;
-    private AtomicBoolean isOutputRegistered;
+    private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
+    private final int numPeers;
+    private final Consumer<String> statusCallback;
+    private final AtomicBoolean isOutputRegistered;
 
-    private Semaphore semaphore = new Semaphore(1);
-
-    private ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
+    private final ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
         Thread t = Executors.defaultThreadFactory().newThread(r);
         t.setDaemon(true);
         return t;
@@ -73,6 +71,7 @@ public class JoinPoolHandler {
         Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
         credentialsListener = new NostrListener(joinIdentity, relay, null);
+        Semaphore semaphore = new Semaphore(1);
 
         credentialsListener.startListening(decryptedMessage -> {
             try {
@@ -264,8 +263,7 @@ public class JoinPoolHandler {
     }
 
     private void shutdownThreads() {
-        stop();
-        if (threadPool != null && !threadPool.isShutdown()) {
+        if (!threadPool.isShutdown()) {
             threadPool.shutdown();
 
             try {
@@ -288,6 +286,7 @@ public class JoinPoolHandler {
             if (poolMessageListener != null) {
                 poolMessageListener.stop();
             }
+            shutdownThreads();
         } catch (Exception e) {
             logger.warning("Error stopping listeners: " + e.getMessage());
         }
