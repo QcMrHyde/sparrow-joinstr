@@ -96,7 +96,7 @@ public class JoinstrPool {
             JoinstrPoolStoreWrapper psWrapper = gson.fromJson(text.toString(), JoinstrPoolStoreWrapper.class);
             Config.get().setPoolStore(psWrapper.poolsList);
         } catch (Exception e) {
-            if(e == null) {}
+            throw new RuntimeException(e);
         }
     }
 
