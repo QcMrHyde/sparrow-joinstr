@@ -23,6 +23,7 @@ import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeoutException;
@@ -42,6 +43,8 @@ public class JoinPoolHandler {
     private Consumer<String> statusCallback;
     private CoinjoinHandler coinjoinHandler;
     private AtomicBoolean isOutputRegistered;
+
+    private Semaphore semaphore = new Semaphore(1);
 
     private ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
         Thread t = Executors.defaultThreadFactory().newThread(r);
@@ -72,9 +75,15 @@ public class JoinPoolHandler {
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
+            try {
+                semaphore.acquire();
+            } catch (InterruptedException e) {
+                throw new RuntimeException(e);
+            }
             if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
                 handleCredentialsReceived(decryptedMessage);
             }
+            semaphore.release();
         });
 
         // Schedule thread to stop listening after pool timeout
