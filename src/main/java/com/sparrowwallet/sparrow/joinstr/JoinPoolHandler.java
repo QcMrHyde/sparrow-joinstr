@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr;
 
+import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.address.Address;
@@ -16,6 +17,7 @@ import nostr.event.Kind;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
+import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -103,7 +105,8 @@ public class JoinPoolHandler {
         try {
 
             Gson gson = new Gson();
-            Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
+            Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
+            Map<String, Object> credentials = gson.fromJson(credentialsJson, mapType);
 
             String poolPrivateKey = credentials.get("private_key").toString();
             poolIdentity = Identity.create(poolPrivateKey);
