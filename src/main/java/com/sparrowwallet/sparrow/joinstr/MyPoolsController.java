@@ -86,9 +86,7 @@ public class MyPoolsController extends JoinstrFormController {
             });
 
         } catch (Exception e) {
-            if(e != null) {
-                e.printStackTrace();
-            }
+            showError(e.getMessage());
         }
 
     }
