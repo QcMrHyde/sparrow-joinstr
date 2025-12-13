@@ -19,8 +19,6 @@ import nostr.event.message.ReqMessage;
 import nostr.id.Identity;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.logging.ConsoleHandler;
@@ -102,7 +100,7 @@ public class OtherPoolsController extends JoinstrFormController {
     }
 
     private void fetchPools() {
-        new Thread(() -> {
+        this.getJoinstrController().threadPool.submit(() -> {
             try {
                 Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
                 textLogger.setLevel(Level.INFO);
@@ -143,7 +141,7 @@ public class OtherPoolsController extends JoinstrFormController {
                                             );
 
                                             if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
-                                               myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                                                    myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
 
                                                 pools.add(pool);
                                                 logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
@@ -200,7 +198,8 @@ public class OtherPoolsController extends JoinstrFormController {
                 e.printStackTrace();
                 Platform.runLater(() -> showError("Failed to fetch pools: " + e.getMessage()));
             }
-        }).start();
+        });
+
     }
 
     private void updateUIWithPools(List<JoinstrPool> pools) {

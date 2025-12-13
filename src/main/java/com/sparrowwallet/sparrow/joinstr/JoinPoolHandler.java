@@ -19,6 +19,9 @@ import nostr.id.Identity;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -37,6 +40,12 @@ public class JoinPoolHandler {
     private int numPeers;
     private Consumer<String> statusCallback;
     private AtomicBoolean isOutputRegistered;
+
+    private ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
+        Thread t = Executors.defaultThreadFactory().newThread(r);
+        t.setDaemon(true);
+        return t;
+    });
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
@@ -67,7 +76,7 @@ public class JoinPoolHandler {
         });
 
         // Schedule thread to stop listening after pool timeout
-        new Thread(() -> {
+        threadPool.submit(() -> {
             try {
                 long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
                 if(msLeft > 1000) {
@@ -83,7 +92,7 @@ public class JoinPoolHandler {
                     logger.warning("Error stopping credentials listener: " + e.getMessage());
                 }
             }
-        }).start();
+        });
 
     }
 
@@ -200,7 +209,7 @@ public class JoinPoolHandler {
         });
 
         // Schedule thread to stop listening after pool timeout
-        new Thread(() -> {
+        threadPool.submit(() -> {
             try {
                 long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
                 if(msLeft > 1000) {
@@ -216,7 +225,7 @@ public class JoinPoolHandler {
                     logger.warning("Error stopping credentials listener: " + e.getMessage());
                 }
             }
-        }).start();
+        });
     }
 
     private void handleOutputReceived(String decryptedMessage) {
@@ -239,6 +248,23 @@ public class JoinPoolHandler {
             }
         } catch (Exception e) {
             logger.severe("Error handling output: " + e.getMessage());
+        }
+    }
+
+    private void shutdownThreads() {
+        stop();
+        if (threadPool != null && !threadPool.isShutdown()) {
+            threadPool.shutdown();
+
+            try {
+                if (!threadPool.awaitTermination(3, TimeUnit.SECONDS)) {
+                    threadPool.shutdownNow();
+                }
+            } catch (InterruptedException e) {
+                logger.severe("Error stopping threads: " + e.getMessage());
+                threadPool.shutdownNow();
+                Thread.currentThread().interrupt();
+            }
         }
     }
 
