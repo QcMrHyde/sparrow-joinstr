@@ -69,8 +69,10 @@ public class JoinPoolHandler {
         // Schedule thread to stop listening after pool timeout
         new Thread(() -> {
             try {
-                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
-                MyPoolsController.clearPoolList();
+                long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
+                if(msLeft > 1000) {
+                    Thread.sleep(msLeft);
+                }
                 logger.info("Pool expired, stopping listener");
             } catch (InterruptedException e) {
                 logger.warning("Error stopping listening thread: " + e.getMessage());
@@ -200,8 +202,10 @@ public class JoinPoolHandler {
         // Schedule thread to stop listening after pool timeout
         new Thread(() -> {
             try {
-                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
-                MyPoolsController.clearPoolList();
+                long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
+                if(msLeft > 1000) {
+                    Thread.sleep(msLeft);
+                }
                 logger.info("Pool expired, stopping listener");
             } catch (InterruptedException e) {
                 logger.warning("Error stopping listening thread: " + e.getMessage());
