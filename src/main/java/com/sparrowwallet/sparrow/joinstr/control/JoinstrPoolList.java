@@ -32,6 +32,7 @@ import java.util.TimeZone;
 import java.util.function.Consumer;
 
 import nostr.base.PublicKey;
+import java.util.HashMap;
 
 public class JoinstrPoolList extends VBox {
 
@@ -39,6 +40,7 @@ public class JoinstrPoolList extends VBox {
     private ObservableList<JoinstrPool> poolData;
     private FilteredList<JoinstrPool> filteredData;
     private Consumer<JoinstrPool> onPoolSelectedListener;
+    private Map<String, JoinPoolHandler> poolHandlers = new HashMap<>();
 
     public JoinstrPoolList() {
         initialize();
@@ -180,6 +182,9 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
+
+                            stopPoolHandler(pool.getPubkey());
+                            
                             Identity identity = Identity.generateRandomIdentity();
                             String pubkey = identity.getPublicKey().toString();
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
@@ -235,7 +240,22 @@ public class JoinstrPoolList extends VBox {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
     public void clearPools() {
+        stopAllHandlers();
         poolData.clear();
+    }
+
+    public void stopPoolHandler(String poolPubkey) {
+        JoinPoolHandler handler = poolHandlers.remove(poolPubkey);
+        if (handler != null) {
+            handler.stop();
+        }
+    }
+
+    public void stopAllHandlers() {
+        for (JoinPoolHandler handler : poolHandlers.values()) {
+            handler.stop();
+        }
+        poolHandlers.clear();
     }
 
     public void filterPools(String searchText) {
