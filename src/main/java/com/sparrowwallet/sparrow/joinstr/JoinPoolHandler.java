@@ -89,6 +89,7 @@ public class JoinPoolHandler implements IThreadExecutor {
                 } catch (InterruptedException e) {
                     Thread.currentThread().interrupt();
                     logger.warning("Error stopping listening thread: " + e.getMessage());
+                    throw new RuntimeException(e);
                 } finally {
                     try {
                         credentialsListener.stop();
