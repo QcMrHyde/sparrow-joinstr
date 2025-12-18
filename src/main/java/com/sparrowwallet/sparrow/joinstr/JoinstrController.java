@@ -6,8 +6,6 @@ import com.sparrowwallet.sparrow.io.Config;
 import java.io.IOException;
 import java.net.URL;
 import java.util.Locale;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 
 import javafx.fxml.FXML;
@@ -20,7 +18,7 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-public class JoinstrController extends JoinstrFormController {
+public class JoinstrController extends JoinstrFormController implements IThreadExecutor {
 
     private Stage stage;
 
@@ -36,12 +34,6 @@ public class JoinstrController extends JoinstrFormController {
     private ToggleGroup joinstrMenu;
 
     private JoinstrPool selectedPool;
-
-    protected final ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
-        Thread t = Executors.defaultThreadFactory().newThread(r);
-        t.setDaemon(true);
-        return t;
-    });
 
     public JoinstrController() {
 

@@ -126,13 +126,8 @@ public class JoinstrPool {
     }
 
     public void startListeningForCredentials(Identity identity) {
-
         setStatus("waiting for credentials");
-        this.handler = new JoinPoolHandler(identity, this, status -> {
-            Platform.runLater(() -> {
-                setStatus(status);
-            });
-        });
+        this.handler = new JoinPoolHandler(identity, this, this::setStatus);
         handler.startListeningForCredentials();
     }
 

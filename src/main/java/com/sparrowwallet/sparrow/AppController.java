@@ -586,6 +586,7 @@ public class AppController implements Initializable {
                 });
                 stage.setOnCloseRequest(event -> {
                     joinstrController.close();
+                    joinstrController = null;
                 });
             } else {
                 stage = joinstrController.getStage();
