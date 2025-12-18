@@ -25,15 +25,13 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-public class JoinPoolHandler {
+public class JoinPoolHandler implements IThreadExecutor {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
-
     private final Identity joinIdentity;
     private JoinstrPool pool;
     private final String relay;
@@ -70,39 +68,44 @@ public class JoinPoolHandler {
      */
     public void startListeningForCredentials() {
 
-        Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
+        long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
+        if(msLeft > 1000) {
+            Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-        credentialsListener.startListening(decryptedMessage -> {
-            try {
-                semaphore.acquire();
-            } catch (InterruptedException e) {
-                throw new RuntimeException(e);
-            }
-            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
-                handleCredentialsReceived(decryptedMessage);
-            }
-            semaphore.release();
-        });
-
-        // Schedule thread to stop listening after pool timeout
-        threadPool.submit(() -> {
-            try {
-                Thread.sleep((Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000);
-                credentialsListener.stop();
-                MyPoolsController.clearPoolList();
-                logger.info("Pool expired, stopping listener");
-            } catch (InterruptedException e) {
-                logger.warning("Error stopping listening thread: " + e.getMessage());
-            } finally {
+            credentialsListener.startListening(decryptedMessage -> {
                 try {
-                    credentialsListener.stop();
-                } catch (TimeoutException e) {
-                    logger.warning("Error stopping credentials listener: " + e.getMessage());
+                    semaphore.acquire();
+                    if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
+                        handleCredentialsReceived(decryptedMessage);
+                    }
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warning("Error stopping listening thread: " + e.getMessage());
+                    throw new RuntimeException(e);
+                } finally {
+                    semaphore.release();
                 }
-            }
-        });
+            });
+
+            // Schedule thread to stop listening after pool timeout
+            threadPool.submit(() -> {
+                try {
+                    Thread.sleep(msLeft);
+                    logger.info("Pool expired, stopping listener");
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warning("Error stopping listening thread: " + e.getMessage());
+                } finally {
+                    try {
+                        credentialsListener.stop();
+                    } catch (TimeoutException e) {
+                        logger.warning("Error stopping credentials listener: " + e.getMessage());
+                    }
+                }
+            });
+        }
 
     }
 
@@ -123,35 +126,42 @@ public class JoinPoolHandler {
             Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
             Map<String, Object> credentials = gson.fromJson(credentialsJson, mapType);
 
-            String poolPrivateKey = credentials.get("private_key").toString();
-            poolIdentity = Identity.create(poolPrivateKey);
+            String poolPrivateKey = "";
+            if(credentials.get("private_key") != null)
+                poolPrivateKey = credentials.get("private_key").toString();
 
-            JoinstrPool poolWithCredentials = new JoinstrPool(
-                    credentials.get("relay").toString(),
-                    credentials.get("public_key").toString(),
-                    pool.getDenomination(),
-                    credentials.get("peers").toString(),
-                    credentials.get("timeout").toString(),
-                    poolPrivateKey);
+            if(!poolPrivateKey.isEmpty()) {
 
-            ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-            pools.removeIf(p -> p.getPubkey().equals(poolWithCredentials.getPubkey()));
-            pools.add(poolWithCredentials);
-            Config.get().setPoolStore(pools);
-            JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
+                poolIdentity = Identity.create(poolPrivateKey);
 
-            this.pool = poolWithCredentials;
+                JoinstrPool poolWithCredentials = new JoinstrPool(
+                        pool.getRelay(),
+                        pool.getPubkey(),
+                        pool.getDenomination(),
+                        pool.getPeers(),
+                        pool.getTimeout(),
+                        poolPrivateKey
+                );
 
-            try {
-                credentialsListener.stop();
-            } catch (Exception e) {
-                logger.warning("Error stopping credentials listener: " + e.getMessage());
+                ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
+                pools.removeIf(p -> p.getPubkey().equals(poolWithCredentials.getPubkey()));
+                pools.add(poolWithCredentials);
+                Config.get().setPoolStore(pools);
+                JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
+
+                this.pool = poolWithCredentials;
+
+                try {
+                    credentialsListener.stop();
+                } catch (Exception e) {
+                    logger.warning("Error stopping credentials listener: " + e.getMessage());
+                }
+
+                Platform.runLater(() -> statusCallback.accept("Credentials received"));
+
+                // Use CoinjoinHandler for the rest of the flow
+                startCoinjoinFlow();
             }
-
-            Platform.runLater(() -> statusCallback.accept("Credentials received"));
-
-            // Use CoinjoinHandler for the rest of the flow
-            startCoinjoinFlow();
 
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());

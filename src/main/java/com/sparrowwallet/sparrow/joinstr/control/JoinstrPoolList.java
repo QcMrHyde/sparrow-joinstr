@@ -4,6 +4,7 @@ import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
 import javafx.beans.property.SimpleStringProperty;
+import nostr.event.Kind;
 import nostr.id.Identity;
 import nostr.event.BaseTag;
 import nostr.event.tag.PubKeyTag;
@@ -30,6 +31,7 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.TimeZone;
 import java.util.function.Consumer;
+import java.util.logging.Logger;
 
 import nostr.base.PublicKey;
 
@@ -195,7 +197,7 @@ public class JoinstrPoolList extends VBox {
 
                             GenericEvent encrypted_event = new GenericEvent(
                                     identity.getPublicKey(),
-                                    4,
+                                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
                                     tags,
                                     encryptedContent
                             );
@@ -204,7 +206,7 @@ public class JoinstrPoolList extends VBox {
                             nip04.sign();
                             nip04.send(Map.of("nos", pool.getRelay()));
 
-                            System.out.println("Join request sent. Event ID:: " + encrypted_event.getId());
+                            Logger.getLogger(JoinstrPoolList.class.getName()).info("Join request sent. Event ID:: " + encrypted_event.getId());
                             joinButton.setDisable(true);
                             pool.startListeningForCredentials(identity);
 
