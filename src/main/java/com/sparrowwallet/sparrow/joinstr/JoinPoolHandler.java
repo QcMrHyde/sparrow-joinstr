@@ -105,7 +105,14 @@ public class JoinPoolHandler implements IThreadExecutor {
     /**
      * Handle received pool credentials
      */
+    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
+
     private void handleCredentialsReceived(String credentialsJson) {
+    if (!credentialsReceived.compareAndSet(false, true)) {
+        logger.warning("Credentials already received, ignoring duplicate message");
+        return;
+    }
+ 
         try {
 
             Gson gson = new Gson();
@@ -173,7 +180,7 @@ public class JoinPoolHandler implements IThreadExecutor {
             Address myOutputAddress = freshEntry.getAddress();
 
             String outputContent = String.format(
-                    "{\"type\":\"output\",\"address\":\"%s\"}",
+                    "{\"type\": \"output\",\"address\":\"%s\"}",
                     myOutputAddress.toString()
             );
 
@@ -254,7 +261,8 @@ public class JoinPoolHandler implements IThreadExecutor {
                 outputAddresses.add(address);
                 Platform.runLater(() -> statusCallback.accept("Waiting for peers"));
 
-                if (outputAddresses.size() >= numPeers) {
+                int currentSize = outputAddresses.size();
+                if (currentSize == numPeers) {
                     Platform.runLater(() -> statusCallback.accept("Input registration"));
                     stop();
                 }
