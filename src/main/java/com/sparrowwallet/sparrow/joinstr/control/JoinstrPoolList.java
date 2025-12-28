@@ -33,6 +33,7 @@ import java.util.TimeZone;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
+import com.sparrowwallet.sparrow.joinstr.JoinPoolHandler;
 import nostr.base.PublicKey;
 
 public class JoinstrPoolList extends VBox {
