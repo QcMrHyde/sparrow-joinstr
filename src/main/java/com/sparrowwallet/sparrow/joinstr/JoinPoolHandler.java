@@ -21,6 +21,8 @@ import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
@@ -40,6 +42,15 @@ public class JoinPoolHandler implements IThreadExecutor {
     private final int numPeers;
     private final Consumer<String> statusCallback;
     private final AtomicBoolean isOutputRegistered;
+    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
+    private final transient Semaphore listenerSemaphore = new Semaphore(1);
+    private final transient Semaphore outputAddressesSemaphore = new Semaphore(1);
+
+    private final ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
+        Thread t = Executors.defaultThreadFactory().newThread(r);
+        t.setDaemon(true);
+        return t;
+    });
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
@@ -59,59 +70,63 @@ public class JoinPoolHandler implements IThreadExecutor {
      */
     public void startListeningForCredentials() {
 
-        long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
-        if(msLeft > 1000) {
-            Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
+        try {
 
-            credentialsListener = new NostrListener(joinIdentity, relay, null);
-            Semaphore semaphore = new Semaphore(1);
+            long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
+            if(msLeft > 1000) {
+                Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
-            credentialsListener.startListening(decryptedMessage -> {
-                try {
-                    semaphore.acquire();
-                    if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
-                        handleCredentialsReceived(decryptedMessage);
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warning("Error stopping listening thread: " + e.getMessage());
-                    throw new RuntimeException(e);
-                } finally {
-                    semaphore.release();
-                }
-            });
+                credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-            // Schedule thread to stop listening after pool timeout
-            threadPool.submit(() -> {
-                try {
-                    Thread.sleep(msLeft);
-                    logger.info("Pool expired, stopping listener");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warning("Error stopping listening thread: " + e.getMessage());
-                    throw new RuntimeException(e);
-                } finally {
+                credentialsListener.startListening(decryptedMessage -> {
                     try {
-                        credentialsListener.stop();
-                    } catch (TimeoutException e) {
-                        logger.warning("Error stopping credentials listener: " + e.getMessage());
+                        listenerSemaphore.acquire();
+                        if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
+                            handleCredentialsReceived(decryptedMessage);
+                        }
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.warning("Error stopping listening thread: " + e.getMessage());
+                        throw new RuntimeException(e);
+                    } finally {
+                        listenerSemaphore.release();
                     }
-                }
-            });
-        }
+                });
 
+                // Schedule thread to stop listening after pool timeout
+                threadPool.submit(() -> {
+                    try {
+                        Thread.sleep(msLeft);
+                        logger.info("Pool expired, stopping listener");
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.warning("Error stopping listening thread: " + e.getMessage());
+                        throw new RuntimeException(e);
+                    } finally {
+                        try {
+                            credentialsListener.stop();
+                        } catch (TimeoutException e) {
+                            logger.warning("Error stopping credentials listener: " + e.getMessage());
+                        }
+                    }
+                });
+            }
+
+        } catch (RuntimeException e) {
+            logger.warning("Error stopping threads: " + e.getMessage());
+            throw new RuntimeException(e);
+        }
     }
 
     /**
      * Handle received pool credentials
      */
-    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
-
     private void handleCredentialsReceived(String credentialsJson) {
-    if (!credentialsReceived.compareAndSet(false, true)) {
-        logger.warning("Credentials already received, ignoring duplicate message");
-        return;
-    }
+
+        if (!credentialsReceived.compareAndSet(false, true)) {
+            logger.warning("Credentials already received, ignoring duplicate message");
+            return;
+        }
  
         try {
 
@@ -226,7 +241,7 @@ public class JoinPoolHandler implements IThreadExecutor {
 
             poolMessageListener = new NostrListener(poolIdentity, relay, null);
             poolMessageListener.startListening(decryptedMessage -> {
-                if (decryptedMessage.contains("\"type\":\"output\"")) {
+                if (decryptedMessage.contains("\"type\": \"output\"")) {
                     handleOutputReceived(decryptedMessage);
                 }
             });
@@ -257,6 +272,7 @@ public class JoinPoolHandler implements IThreadExecutor {
             Map<String, String> outputData = gson.fromJson(decryptedMessage, Map.class);
             String address = outputData.get("address");
 
+            outputAddressesSemaphore.acquire();
             if (address != null && !outputAddresses.contains(address)) {
                 outputAddresses.add(address);
                 Platform.runLater(() -> statusCallback.accept("Waiting for peers"));
@@ -269,6 +285,9 @@ public class JoinPoolHandler implements IThreadExecutor {
             }
         } catch (Exception e) {
             logger.severe("Error handling output: " + e.getMessage());
+        }
+        finally {
+            outputAddressesSemaphore.release();
         }
     }
 
@@ -301,4 +320,5 @@ public class JoinPoolHandler implements IThreadExecutor {
             logger.warning("Error stopping listeners: " + e.getMessage());
         }
     }
+
 }

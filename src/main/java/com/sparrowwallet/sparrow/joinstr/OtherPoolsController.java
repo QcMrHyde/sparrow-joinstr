@@ -98,7 +98,7 @@ public class OtherPoolsController extends JoinstrFormController {
     }
 
     private void fetchPools() {
-        this.getJoinstrController().threadPool.submit(() -> {
+        this.getJoinstrController().getThreadPool().submit(() -> {
             try {
                 Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
                 textLogger.setLevel(Level.INFO);
