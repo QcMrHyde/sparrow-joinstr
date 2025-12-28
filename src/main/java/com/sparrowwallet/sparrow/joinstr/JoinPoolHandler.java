@@ -68,11 +68,13 @@ public class JoinPoolHandler implements IThreadExecutor {
      */
     public void startListeningForCredentials() {
 
-        long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
-        if(msLeft > 1000) {
-            Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
+        try {
 
-        credentialsListener = new NostrListener(joinIdentity, relay, null);
+            long msLeft = (Long.parseLong(pool.getTimeout()) - Instant.now().getEpochSecond()) * 1000;
+            if(msLeft > 1000) {
+                Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
+
+                credentialsListener = new NostrListener(joinIdentity, relay, null);
 
             credentialsListener.startListening(decryptedMessage -> {
                 try {
@@ -108,13 +110,15 @@ public class JoinPoolHandler implements IThreadExecutor {
             });
         }
 
+        } catch (RuntimeException e) {
+            logger.warning("Error stopping threads: " + e.getMessage());
+            throw new RuntimeException(e);
+        }
     }
 
     /**
      * Handle received pool credentials
      */
-    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
-
     private void handleCredentialsReceived(String credentialsJson) {
         if (!credentialsReceived.compareAndSet(false, true)) {
             logger.warning("Credentials already received, ignoring duplicate message");
@@ -306,4 +310,5 @@ public class JoinPoolHandler implements IThreadExecutor {
             logger.warning("Error stopping listeners: " + e.getMessage());
         }
     }
+
 }
