@@ -10,7 +10,6 @@ import java.io.FileWriter;
 import java.io.IOException;
 import java.util.*;
 
-import javafx.application.Platform;
 import javafx.beans.property.SimpleStringProperty;
 import javafx.stage.FileChooser;
 import nostr.id.Identity;
@@ -62,7 +61,17 @@ public class JoinstrPool {
     }
 
     public String getTimeout() { return timeout.get(); }
-    public Identity getJoinstrIdentity() { return Identity.create(privateKey); }
+    public Identity getJoinstrIdentity() {
+        Identity joinstrIdentity = null;
+        try {
+            if(!privateKey.isEmpty())
+                joinstrIdentity = Identity.create(privateKey);
+
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
+        return joinstrIdentity;
+    }
 
     public String getStatus() { return status.get();}
     public void setStatus(String status) {this.status.set(status);}
@@ -79,7 +88,7 @@ public class JoinstrPool {
                 new FileChooser.ExtensionFilter("Json files", "*.json")
         );
         File file = fileChooser.showOpenDialog(null);
-        Scanner scanner = null;
+        Scanner scanner;
         try {
             scanner = new Scanner(file);
         } catch (FileNotFoundException e) {
@@ -119,7 +128,7 @@ public class JoinstrPool {
 
         Gson gson = new Gson();
         String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(Config.get().getPoolStore()));
-        FileWriter writer = new FileWriter(new File(filePath));
+        FileWriter writer = new FileWriter(filePath);
         writer.write(poolsJson);
         writer.close();
 
