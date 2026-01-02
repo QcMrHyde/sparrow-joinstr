@@ -27,12 +27,18 @@ import java.util.ArrayList;
 import java.util.Map;
 import java.util.function.Consumer;
 
+import com.sparrowwallet.sparrow.joinstr.JoinPoolHandler;
+import javafx.application.Platform;
+import nostr.base.PublicKey;
+import java.util.HashMap;
+
 public class JoinstrPoolList extends VBox {
 
     private TableView<JoinstrPool> poolTableView;
     private ObservableList<JoinstrPool> poolData;
     private FilteredList<JoinstrPool> filteredData;
     private Consumer<JoinstrPool> onPoolSelectedListener;
+    private Map<String, JoinPoolHandler> poolHandlers = new HashMap<>();
 
     public JoinstrPoolList() {
         initialize();
@@ -159,6 +165,9 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
+
+                            stopPoolHandler(pool.getPubkey());
+                            
                             Identity identity = Identity.generateRandomIdentity();
                             String pubkey = identity.getPublicKey().toString();
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
@@ -166,10 +175,11 @@ public class JoinstrPoolList extends VBox {
 
                             String requestContent = "{\"type\": \"join_pool\"}";
                             List<BaseTag> tags = new ArrayList<>();
-                            tags.add(new PubKeyTag(identity.getPublicKey()));
+                            PublicKey poolPublicKey = new PublicKey(pool.getPubkey());
+                            tags.add(new PubKeyTag(poolPublicKey));
 
-                            NIP04 nip04 = new NIP04(identity, identity.getPublicKey());
-                            String encryptedContent = nip04.encrypt(identity, requestContent, identity.getPublicKey());
+                            NIP04 nip04 = new NIP04(identity, poolPublicKey);
+                            String encryptedContent = nip04.encrypt(identity, requestContent, poolPublicKey);
 
                             GenericEvent encrypted_event = new GenericEvent(
                                     identity.getPublicKey(),
@@ -186,6 +196,15 @@ public class JoinstrPoolList extends VBox {
 
                             pool.setStatus("waiting for credentials");
                             joinButton.setDisable(true);
+
+                            JoinPoolHandler handler = new JoinPoolHandler(identity, pool, status -> {
+                                Platform.runLater(() -> {
+                                    pool.setStatus(status);
+                                });
+                            });
+                            handler.startListeningForCredentials();
+
+                            poolHandlers.put(pool.getPubkey(), handler);
                         });
                     }
 
@@ -213,7 +232,22 @@ public class JoinstrPoolList extends VBox {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
     public void clearPools() {
+        stopAllHandlers();
         poolData.clear();
+    }
+
+    public void stopPoolHandler(String poolPubkey) {
+        JoinPoolHandler handler = poolHandlers.remove(poolPubkey);
+        if (handler != null) {
+            handler.stop();
+        }
+    }
+
+    public void stopAllHandlers() {
+        for (JoinPoolHandler handler : poolHandlers.values()) {
+            handler.stop();
+        }
+        poolHandlers.clear();
     }
 
     public void filterPools(String searchText) {

@@ -85,7 +85,22 @@ public class NostrListener {
             String senderPubkey = event.get("pubkey").asText();
             long timestamp = event.get("created_at").asLong();
 
-            logger.info("Received encrypted DM from: " + senderPubkey);
+            JsonNode tags = event.get("tags");
+            String recipientPubkey = null;
+            if (tags != null && tags.isArray()) {
+                for (JsonNode tag : tags) {
+                    if (tag.isArray() && tag.size() > 0 && "p".equals(tag.get(0).asText())) {
+                        recipientPubkey = tag.get(1).asText();
+                        break;
+                    }
+                }
+            }
+
+            if (recipientPubkey == null || !recipientPubkey.equals(identity.getPublicKey().toString())) {
+                return;
+            }
+
+            logger.info("Received encrypted DM from: " + senderPubkey + " to: " + recipientPubkey);
             logger.info("Time: " + new Date(timestamp * 1000));
 
             try {
@@ -95,7 +110,7 @@ public class NostrListener {
                         new PublicKey(senderPubkey)
                 );
 
-                if (decryptedContent.contains("\"type\": \"join_pool\"")) {
+                if (decryptedContent.contains("\"type\": \"join_pool\"") && poolCredentials != null) {
                     handleJoinRequest(senderPubkey);
                 }
 
@@ -105,7 +120,7 @@ public class NostrListener {
 
                 logger.info("Successfully decrypted message");
             } catch (Exception e) {
-                logger.warning("Failed to decrypt message: " + e.getMessage());
+                logger.fine("Failed to decrypt message (may not be for us): " + e.getMessage());
             }
         } catch (Exception e) {
             logger.severe("Error handling event message: " + e.getMessage());
@@ -113,6 +128,11 @@ public class NostrListener {
     }
 
     private void handleJoinRequest(String requesterPubkey) {
+        if (poolCredentials == null) {
+            logger.warning("Received join request but poolCredentials is null - ignoring");
+            return;
+        }
+
         try {
             String credentialsJson = String.format(
                     "{\n" +
@@ -159,6 +179,7 @@ public class NostrListener {
             logger.info("Sent pool credentials to: " + requesterPubkey);
         } catch (Exception e) {
             logger.severe("Failed to send pool credentials: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 

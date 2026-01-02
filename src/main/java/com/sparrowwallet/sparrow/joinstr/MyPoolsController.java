@@ -7,6 +7,7 @@ import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 
 import java.io.IOException;
+import java.time.Instant;
 import java.util.ArrayList;
 
 import javafx.event.ActionEvent;
@@ -95,11 +96,22 @@ public class MyPoolsController extends JoinstrFormController {
 
     private void addPoolStoreData() {
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
+        Boolean pollStoreChanged = false;
 
         joinstrPoolList.clearPools();
         for (JoinstrPool pool: pools) {
-            joinstrPoolList.addPool(pool);
+            long timeout = Long.parseLong(pool.getTimeout());
+            if (timeout >= Instant.now().getEpochSecond()) {
+                joinstrPoolList.addPool(pool);
+            } else {
+                pools.remove(pool);
+                pollStoreChanged = true;
+            }
         }
+
+        if(pollStoreChanged)
+            Config.get().setPoolStore(pools);
+
     }
 
     private void filterPools(String searchText) {
