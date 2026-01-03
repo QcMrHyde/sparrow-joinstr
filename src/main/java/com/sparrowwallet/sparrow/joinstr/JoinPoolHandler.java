@@ -102,24 +102,24 @@ public class JoinPoolHandler implements IThreadExecutor {
                     }
                 });
 
-            // Schedule thread to stop listening after pool timeout
-            threadPool.submit(() -> {
-                try {
-                    Thread.sleep(msLeft);
-                    logger.info("Pool expired, stopping listener");
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warning("Error stopping listening thread: " + e.getMessage());
-                    throw new RuntimeException(e);
-                } finally {
+                // Schedule thread to stop listening after pool timeout
+                threadPool.submit(() -> {
                     try {
-                        credentialsListener.stop();
-                    } catch (TimeoutException e) {
-                        logger.warning("Error stopping credentials listener: " + e.getMessage());
+                        Thread.sleep(msLeft);
+                        logger.info("Pool expired, stopping listener");
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.warning("Error stopping listening thread: " + e.getMessage());
+                        throw new RuntimeException(e);
+                    } finally {
+                        try {
+                            credentialsListener.stop();
+                        } catch (TimeoutException e) {
+                            logger.warning("Error stopping credentials listener: " + e.getMessage());
+                        }
                     }
-                }
-            });
-        }
+                });
+            }
 
         } catch (RuntimeException e) {
             logger.warning("Error stopping threads: " + e.getMessage());
