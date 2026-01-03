@@ -187,6 +187,7 @@ public class OtherPoolsController extends JoinstrFormController {
                     Thread.sleep(5000);
 
                 } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
                     logger.warning("Sleep interrupted: " + e.getMessage());
                 } finally {
                     client.disconnect();
