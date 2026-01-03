@@ -238,8 +238,14 @@ public class JoinstrPoolList extends VBox {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
     public void clearPools() {
-        //stopAllHandlers(); TODO
+        stopAllHandlers();
         poolData.clear();
+    }
+
+    public void stopAllHandlers() {
+        for(JoinstrPool pool : poolData) {
+            pool.stopListeningForCredentials();
+        }
     }
 
     public void filterPools(String searchText) {
