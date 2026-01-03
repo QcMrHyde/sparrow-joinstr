@@ -1,4 +1,4 @@
-package com.sparrowwallet.sparrow.joinstr;
+package com.sparrowwallet.sparrow.joinstr.control;
 
 import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
@@ -9,7 +9,6 @@ import java.util.*;
 import java.util.concurrent.ThreadLocalRandom;
 
 import javafx.animation.AnimationTimer;
-import javafx.animation.FadeTransition;
 import javafx.animation.ScaleTransition;
 import javafx.scene.control.*;
 import javafx.scene.layout.*;
@@ -18,8 +17,6 @@ import javafx.scene.paint.Color;
 import javafx.scene.paint.RadialGradient;
 import javafx.scene.paint.Stop;
 import javafx.scene.paint.CycleMethod;
-import javafx.scene.input.MouseEvent;
-import javafx.geometry.Insets;
 import javafx.scene.text.Text;
 import javafx.scene.text.Font;
 import javafx.scene.text.FontWeight;
