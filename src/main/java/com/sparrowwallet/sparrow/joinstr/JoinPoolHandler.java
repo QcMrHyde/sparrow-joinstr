@@ -4,9 +4,11 @@ import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
+import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import javafx.application.Platform;
@@ -37,10 +39,11 @@ public class JoinPoolHandler implements IThreadExecutor {
     private final String relay;
     private NostrListener credentialsListener;
     private Identity poolIdentity;
-    private int numPeers;
-    private Consumer<String> statusCallback;
+    private final int numPeers;
+    private final Consumer<String> statusCallback;
     private CoinjoinHandler coinjoinHandler;
-    private AtomicBoolean isOutputRegistered;
+    private final AtomicBoolean isOutputRegistered;
+    private final AtomicBoolean isCredentialsReceived = new AtomicBoolean(false);
 
     private Semaphore semaphore = new Semaphore(1);
 
@@ -76,20 +79,28 @@ public class JoinPoolHandler implements IThreadExecutor {
 
                 credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-            credentialsListener.startListening(decryptedMessage -> {
-                try {
-                    semaphore.acquire();
-                    if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"") && !isOutputRegistered.get()) {
-                        handleCredentialsReceived(decryptedMessage);
+                credentialsListener.startListening(decryptedMessage -> {
+                    try {
+                        semaphore.acquire();
+
+                        Gson gson = new Gson();
+                        Type mapType = new TypeToken<Map<String, Object>>(){}.getType();
+                        Map<String, Object> decryptedMessageGSON = gson.fromJson(decryptedMessage, mapType);
+
+                        if (decryptedMessageGSON.get("id") != null && decryptedMessageGSON.get("private_key") != null && !isOutputRegistered.get()) {
+                            handleCredentialsReceived(decryptedMessage);
+                        }
+
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        logger.warning("Error stopping listening thread: " + e.getMessage());
+                        throw new RuntimeException(e);
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    } finally {
+                        semaphore.release();
                     }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warning("Error stopping listening thread: " + e.getMessage());
-                    throw new RuntimeException(e);
-                } finally {
-                    semaphore.release();
-                }
-            });
+                });
 
             // Schedule thread to stop listening after pool timeout
             threadPool.submit(() -> {
@@ -120,11 +131,12 @@ public class JoinPoolHandler implements IThreadExecutor {
      * Handle received pool credentials
      */
     private void handleCredentialsReceived(String credentialsJson) {
-        if (!credentialsReceived.compareAndSet(false, true)) {
+
+        if (!isCredentialsReceived.compareAndSet(false, true)) {
             logger.warning("Credentials already received, ignoring duplicate message");
             return;
         }
-
+ 
         try {
 
             Gson gson = new Gson();
@@ -181,12 +193,19 @@ public class JoinPoolHandler implements IThreadExecutor {
     private void startCoinjoinFlow() {
         try {
             Map<com.sparrowwallet.drongo.wallet.Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet;
             if (openWallets.isEmpty()) {
                 throw new IllegalStateException("No wallet found");
+            } else if(openWallets.keySet().stream().filter(Wallet::isValid).count() > 1) {
+                WalletSelectionDialog walletSelectionDialog = new WalletSelectionDialog(openWallets);
+                walletSelectionDialog.showAndWait();
+                selectedWallet = walletSelectionDialog.getSelectedWallet();
+            } else {
+                selectedWallet = openWallets.entrySet().iterator().next();
             }
-            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-            com.sparrowwallet.drongo.wallet.Wallet wallet = firstWallet.getKey();
-            Storage storage = firstWallet.getValue();
+
+            com.sparrowwallet.drongo.wallet.Wallet wallet = selectedWallet.getKey();
+            Storage storage = selectedWallet.getValue();
 
             WalletForm walletForm = new WalletForm(storage, wallet);
             NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);

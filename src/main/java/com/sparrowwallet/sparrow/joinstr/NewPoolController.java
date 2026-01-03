@@ -7,6 +7,7 @@ import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
+import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.io.IOException;
@@ -78,14 +79,22 @@ public class NewPoolController extends JoinstrFormController {
             Address bitcoinAddress;
             Wallet wallet;
             try {
+
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+                Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet;
+
                 if (openWallets.isEmpty()) {
                     throw new Exception("No wallet found. Please open a wallet in Sparrow first.");
+                } else if(openWallets.keySet().stream().filter(Wallet::isValid).count() > 1) {
+                    WalletSelectionDialog walletSelectionDialog = new WalletSelectionDialog(openWallets);
+                    walletSelectionDialog.showAndWait();
+                    selectedWallet = walletSelectionDialog.getSelectedWallet();
+                } else {
+                    selectedWallet = openWallets.entrySet().iterator().next();
                 }
 
-                Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                wallet = firstWallet.getKey();
-                Storage storage = firstWallet.getValue();
+                wallet = selectedWallet.getKey();
+                Storage storage = selectedWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
                 double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress)
