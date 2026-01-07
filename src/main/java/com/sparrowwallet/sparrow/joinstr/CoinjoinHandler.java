@@ -71,8 +71,9 @@ public class CoinjoinHandler {
             this.numPeers = (int) Double.parseDouble(peersStr.trim());
         }
 
-        // Parse denomination (BTC to sats)
-        this.poolAmountSats = (long) (Double.parseDouble(pool.getDenomination()) * 100_000_000);
+        // Parse denomination (BTC to sats) - strip " BTC" suffix if present
+        String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
+        this.poolAmountSats = (long) (Double.parseDouble(denomStr) * 100_000_000);
 
         // Fee rate (default 1 sat/vbyte if not set)
         this.feeRate = 1;
