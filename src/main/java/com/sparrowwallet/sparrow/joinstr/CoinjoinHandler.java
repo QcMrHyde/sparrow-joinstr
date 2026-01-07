@@ -180,6 +180,9 @@ public class CoinjoinHandler {
      * Start input phase - create and sign PSBT with selected UTXO.
      */
     public void startInputPhase(BlockTransactionHashIndex selectedUtxo, WalletNode utxoNode) {
+        logger.info("=== COINJOIN INPUT PHASE v2 START ===");
+        logger.info("UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() +
+                ", value=" + selectedUtxo.getValue() + " sats");
         updateStatus("Creating PSBT");
 
         try {
@@ -385,6 +388,8 @@ public class CoinjoinHandler {
     }
 
     private void finalizeCoinjoin() {
+        logger.info("=== COINJOIN FINALIZE v2 START ===");
+        logger.info("Number of PSBTs to merge: " + inputPSBTs.size());
         updateStatus("Finalizing coinjoin");
 
         try {
