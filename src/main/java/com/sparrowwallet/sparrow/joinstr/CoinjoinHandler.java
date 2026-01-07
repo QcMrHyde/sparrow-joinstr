@@ -5,6 +5,7 @@ import com.sparrowwallet.drongo.address.Address;
 import com.sparrowwallet.drongo.protocol.Script;
 import com.sparrowwallet.drongo.protocol.SigHash;
 import com.sparrowwallet.drongo.protocol.Transaction;
+import com.sparrowwallet.drongo.protocol.TransactionInput;
 import com.sparrowwallet.drongo.protocol.TransactionOutput;
 import com.sparrowwallet.drongo.psbt.PSBT;
 import com.sparrowwallet.drongo.psbt.PSBTInput;
@@ -367,30 +368,90 @@ public class CoinjoinHandler {
         updateStatus("Finalizing coinjoin");
 
         try {
-            // Combine all PSBTs
-            PSBT combined = new PSBT(Base64.decode(inputPSBTs.get(0)), false);
+            // For coinjoin, each PSBT has a different input but same outputs
+            // We need to build a new transaction with ALL inputs from ALL PSBTs
 
-            for (int i = 1; i < inputPSBTs.size(); i++) {
-                PSBT otherPsbt = new PSBT(Base64.decode(inputPSBTs.get(i)), false);
-                combined.combine(otherPsbt);
+            logger.info("Merging " + inputPSBTs.size() + " PSBTs for coinjoin");
+
+            // Parse all PSBTs first
+            List<PSBT> psbts = new ArrayList<>();
+            for (String psbtBase64 : inputPSBTs) {
+                PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
+                psbts.add(psbt);
+                logger.info("Parsed PSBT with " + psbt.getPsbtInputs().size() + " inputs, " +
+                        psbt.getTransaction().getOutputs().size() + " outputs");
             }
 
-            logger.info("Combined " + inputPSBTs.size() + " PSBTs");
+            // Create the combined transaction
+            Transaction combinedTx = new Transaction();
+            combinedTx.setVersion(2);
 
-            // Calculate the fee BEFORE extracting the transaction
+            // Add all inputs from all PSBTs (each PSBT has one input from each participant)
+            for (PSBT psbt : psbts) {
+                Transaction tx = psbt.getTransaction();
+                for (TransactionInput input : tx.getInputs()) {
+                    combinedTx.addInput(input.getOutpoint().getHash(), (int) input.getOutpoint().getIndex(),
+                            input.getScriptSig());
+                }
+            }
+
+            // Use outputs from the first PSBT (they should all have the same outputs)
+            Transaction firstTx = psbts.get(0).getTransaction();
+            for (TransactionOutput output : firstTx.getOutputs()) {
+                combinedTx.addOutput(output.getValue(), output.getScript());
+            }
+
+            logger.info("Combined transaction: " + combinedTx.getInputs().size() + " inputs, " +
+                    combinedTx.getOutputs().size() + " outputs");
+
+            // Create a new PSBT for the combined transaction
+            PSBT combinedPsbt = new PSBT(combinedTx);
+
+            // Copy witness UTXOs and signatures from each original PSBT to the combined
+            // PSBT
+            int inputIndex = 0;
+            for (PSBT psbt : psbts) {
+                PSBTInput originalInput = psbt.getPsbtInputs().get(0);
+                PSBTInput combinedInput = combinedPsbt.getPsbtInputs().get(inputIndex);
+
+                // Copy witness UTXO
+                if (originalInput.getWitnessUtxo() != null) {
+                    combinedInput.setWitnessUtxo(originalInput.getWitnessUtxo());
+                }
+
+                // Copy final script witness if present
+                if (originalInput.getFinalScriptWitness() != null) {
+                    combinedInput.setFinalScriptWitness(originalInput.getFinalScriptWitness());
+                }
+
+                // Copy final script sig if present
+                if (originalInput.getFinalScriptSig() != null) {
+                    combinedInput.setFinalScriptSig(originalInput.getFinalScriptSig());
+                }
+
+                // Copy partial signatures
+                if (originalInput.getPartialSignatures() != null && !originalInput.getPartialSignatures().isEmpty()) {
+                    for (var entry : originalInput.getPartialSignatures().entrySet()) {
+                        combinedInput.getPartialSignatures().put(entry.getKey(), entry.getValue());
+                    }
+                }
+
+                inputIndex++;
+            }
+
+            // Calculate the fee
             long totalInputValue = 0;
-            for (PSBTInput input : combined.getPsbtInputs()) {
+            for (PSBTInput input : combinedPsbt.getPsbtInputs()) {
                 if (input.getWitnessUtxo() != null) {
                     totalInputValue += input.getWitnessUtxo().getValue();
                 }
             }
 
             // Validate our output is present
-            Transaction finalTx = combined.extractTransaction();
+            Transaction finalTx = combinedPsbt.extractTransaction();
 
             long totalOutputValue = 0;
             boolean ourOutputFound = false;
-            long expectedAmount = poolAmountSats - (feeRate * 150 * numPeers / numPeers);
 
             for (TransactionOutput output : finalTx.getOutputs()) {
                 totalOutputValue += output.getValue();
@@ -413,7 +474,7 @@ public class CoinjoinHandler {
 
             // Calculate fee
             long fee = totalInputValue - totalOutputValue;
-            logger.info("Transaction fee: " + fee + " sats");
+            logger.info("Final transaction: txid=" + finalTx.getTxId() + ", fee=" + fee + " sats");
 
             // Broadcast the transaction with fee
             updateStatus("Broadcasting transaction");
