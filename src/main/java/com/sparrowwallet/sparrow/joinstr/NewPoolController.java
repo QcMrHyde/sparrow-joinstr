@@ -25,6 +25,9 @@ import nostr.id.Identity;
 public class NewPoolController extends JoinstrFormController {
 
     private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
+
+    private CoinjoinHandler coinjoinHandler;
+
     @FXML
     private TextField denominationField;
 
@@ -61,8 +64,8 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 int peersValue = Integer.parseInt(peers);
-                if (peersValue <= 2) {
-                    showError("Number of peers must be greater than 2");
+                if (peersValue <= 1) {
+                    showError("Number of peers must be greater than 1");
                     return;
                 }
             } catch (NumberFormatException e) {
@@ -83,9 +86,11 @@ public class NewPoolController extends JoinstrFormController {
                 Storage storage = firstWallet.getValue();
                 bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
 
-                double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress) / 100000000;
+                double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress)
+                        / 100000000;
                 if (Double.parseDouble(denomination) <= recipientDustThreshold) {
-                    throw new Exception("Denomination must be greater than recipient dust threshold (" + recipientDustThreshold + ")");
+                    throw new Exception("Denomination must be greater than recipient dust threshold ("
+                            + recipientDustThreshold + ")");
                 }
 
             } catch (Exception e) {
@@ -102,11 +107,15 @@ public class NewPoolController extends JoinstrFormController {
                 String poolPrivateKey = NostrPublisher.getPoolPrivateKey();
                 JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
 
-                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key, joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
+                JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key,
+                        joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
                 updatePoolStore(pool);
 
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
+
+                // Start CoinjoinHandler for pool creator flow
+                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString());
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
@@ -121,25 +130,52 @@ public class NewPoolController extends JoinstrFormController {
                     "Pool created successfully!\nEvent ID: " + event.getId() +
                             "\nDenomination: " + denomination +
                             "\nPeers: " + peers +
-                            "\n\nPool data saved in file:" +
-                            "\n\"" + Storage.getJoinstrPoolsFile().getPath() + "\""
-            );
-
-            /*
-            Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
-
-            for (Map.Entry<BlockTransactionHashIndex, WalletNode> entry : utxos.entrySet()) {
-                BlockTransactionHashIndex utxo = entry.getKey();
-                WalletNode node = entry.getValue();
-            }
-
-            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
-            dialog.showAndWait();
-             */
+                            "\n\nWaiting for peers to join...");
 
         } catch (Exception e) {
             showError("An error occurred: " + e.getMessage());
         }
+    }
+
+    /**
+     * Start CoinjoinHandler for pool creator after pool is created
+     */
+    private void startCreatorCoinjoinFlow(JoinstrPool pool, String poolPrivateKey, String myOutputAddress) {
+        try {
+            Identity poolIdentity = Identity.create(poolPrivateKey);
+
+            // Create CoinjoinHandler with status callback
+            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, status -> {
+                logger.info("Pool creator status: " + status);
+                // Update pool status in UI if needed
+            });
+
+            // Start output phase with creator's output address
+            coinjoinHandler.startOutputPhase(myOutputAddress);
+            logger.info("Pool creator started coinjoin flow with output: " + myOutputAddress);
+
+            // Also start listening for join requests to share credentials
+            Map<String, String> poolCredentials = new java.util.HashMap<>();
+            poolCredentials.put("id", pool.getPubkey());
+            poolCredentials.put("private_key", poolPrivateKey);
+            poolCredentials.put("relay", pool.getRelay());
+            poolCredentials.put("public_key", pool.getPubkey());
+            poolCredentials.put("peers", pool.getPeers());
+            poolCredentials.put("timeout", pool.getTimeout());
+
+            shareCredentials(poolIdentity, pool.getRelay(), poolCredentials);
+
+        } catch (Exception e) {
+            logger.severe("Error starting creator coinjoin flow: " + e.getMessage());
+            showError("Error starting coinjoin: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Get the CoinjoinHandler for UI access (input registration trigger)
+     */
+    public CoinjoinHandler getCoinjoinHandler() {
+        return coinjoinHandler;
     }
 
     private void updatePoolStore(JoinstrPool pool) throws IOException {
@@ -154,7 +190,7 @@ public class NewPoolController extends JoinstrFormController {
 
     }
 
-    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials){
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials) {
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 
