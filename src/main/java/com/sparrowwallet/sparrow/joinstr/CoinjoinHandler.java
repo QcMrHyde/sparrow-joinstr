@@ -279,34 +279,54 @@ public class CoinjoinHandler {
                 return;
             }
 
+            if (utxoNode == null) {
+                logger.severe("No UTXO node available for signing - cannot determine which key to use");
+                updateStatus("Error: No UTXO node for signing");
+                return;
+            }
+
             // Check if wallet has private keys (software wallet)
-            boolean hasPrivateKeys = wallet.getKeystores().stream()
-                    .anyMatch(keystore -> keystore.hasPrivateKey());
-
-            if (hasPrivateKeys) {
-                logger.info("Signing PSBT with software wallet...");
-
-                // For encrypted wallets, we need to get the decrypted version
-                // For now, assume unencrypted wallet (will need password dialog for encrypted)
-                if (wallet.isEncrypted()) {
-                    logger.warning("Wallet is encrypted - signing may require password dialog");
-                    // In production, would need to show WalletPasswordDialog
-                }
-
-                // Sign the PSBT using wallet's signing capability
-                wallet.sign(psbt);
-
-                // Verify the PSBT is signed
-                PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
-                if (psbtInput.isSigned()) {
-                    logger.info("PSBT signed successfully");
-                } else {
-                    logger.warning("PSBT signing may not have completed");
-                }
-            } else {
-                // Hardware wallet - would need device signing
+            com.sparrowwallet.drongo.wallet.Keystore keystore = wallet.getKeystores().get(0);
+            if (!keystore.hasPrivateKey()) {
                 logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
                 updateStatus("Error: Hardware wallet signing not supported yet");
+                return;
+            }
+
+            logger.info("Signing PSBT with key for node: " + utxoNode.getDerivationPath());
+
+            // For encrypted wallets, we need to get the decrypted version
+            if (wallet.isEncrypted()) {
+                logger.warning("Wallet is encrypted - signing may require password dialog");
+                // In production, would need to show WalletPasswordDialog
+            }
+
+            // Get the private key for this UTXO's node
+            com.sparrowwallet.drongo.crypto.ECKey privateKey = keystore.getKey(utxoNode);
+
+            if (privateKey == null || !privateKey.hasPrivKey()) {
+                logger.severe("Could not get private key for node: " + utxoNode.getDerivationPath());
+                updateStatus("Error: Could not get private key");
+                return;
+            }
+
+            logger.info("Got private key, signing PSBT input...");
+
+            // Sign the PSBT input directly with the private key
+            PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
+            psbtInput.sign(privateKey);
+
+            // Verify the PSBT is signed
+            logger.info("After signing - isSigned: " + psbtInput.isSigned() +
+                    ", isFinalized: " + psbtInput.isFinalized() +
+                    ", partialSigs: "
+                    + (psbtInput.getPartialSignatures() != null ? psbtInput.getPartialSignatures().size() : 0) +
+                    ", hasFinalWitness: " + (psbtInput.getFinalScriptWitness() != null));
+
+            if (psbtInput.isSigned()) {
+                logger.info("PSBT signed successfully");
+            } else {
+                logger.warning("PSBT signing may not have completed - no signatures found");
             }
         } catch (Exception e) {
             logger.severe("Error signing PSBT: " + e.getMessage());
@@ -414,6 +434,16 @@ public class CoinjoinHandler {
                 PSBTInput originalInput = psbt.getPsbtInputs().get(0);
                 PSBTInput combinedInput = combinedPsbt.getPsbtInputs().get(inputIndex);
 
+                // Log the state of the original input
+                logger.info("Input " + inputIndex + " state: isSigned=" + originalInput.isSigned() +
+                        ", isFinalized=" + originalInput.isFinalized() +
+                        ", hasWitnessUtxo=" + (originalInput.getWitnessUtxo() != null) +
+                        ", hasFinalWitness=" + (originalInput.getFinalScriptWitness() != null) +
+                        ", hasFinalSig=" + (originalInput.getFinalScriptSig() != null) +
+                        ", partialSigs="
+                        + (originalInput.getPartialSignatures() != null ? originalInput.getPartialSignatures().size()
+                                : 0));
+
                 // Copy witness UTXO
                 if (originalInput.getWitnessUtxo() != null) {
                     combinedInput.setWitnessUtxo(originalInput.getWitnessUtxo());
@@ -422,11 +452,13 @@ public class CoinjoinHandler {
                 // Copy final script witness if present
                 if (originalInput.getFinalScriptWitness() != null) {
                     combinedInput.setFinalScriptWitness(originalInput.getFinalScriptWitness());
+                    logger.info("Copied final script witness for input " + inputIndex);
                 }
 
                 // Copy final script sig if present
                 if (originalInput.getFinalScriptSig() != null) {
                     combinedInput.setFinalScriptSig(originalInput.getFinalScriptSig());
+                    logger.info("Copied final script sig for input " + inputIndex);
                 }
 
                 // Copy partial signatures
@@ -434,9 +466,23 @@ public class CoinjoinHandler {
                     for (var entry : originalInput.getPartialSignatures().entrySet()) {
                         combinedInput.getPartialSignatures().put(entry.getKey(), entry.getValue());
                     }
+                    logger.info("Copied " + originalInput.getPartialSignatures().size() +
+                            " partial signatures for input " + inputIndex);
+                }
+
+                // Copy sighash type
+                if (originalInput.getSigHash() != null) {
+                    combinedInput.setSigHash(originalInput.getSigHash());
                 }
 
                 inputIndex++;
+            }
+
+            // Log combined PSBT state
+            for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
+                PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
+                logger.info("Combined input " + i + ": isSigned=" + input.isSigned() +
+                        ", isFinalized=" + input.isFinalized());
             }
 
             // Calculate the fee
