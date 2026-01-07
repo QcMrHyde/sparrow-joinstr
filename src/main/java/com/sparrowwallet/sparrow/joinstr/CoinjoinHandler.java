@@ -66,9 +66,9 @@ public class CoinjoinHandler {
         // Parse peers count
         String peersStr = pool.getPeers();
         if (peersStr.contains("/")) {
-            this.numPeers = Integer.parseInt(peersStr.split("/")[1].trim());
+            this.numPeers = (int) Double.parseDouble(peersStr.split("/")[1].trim());
         } else {
-            this.numPeers = Integer.parseInt(peersStr.trim());
+            this.numPeers = (int) Double.parseDouble(peersStr.trim());
         }
 
         // Parse denomination (BTC to sats)
@@ -395,8 +395,8 @@ public class CoinjoinHandler {
 
     private void broadcastTransaction(Transaction tx, long fee) {
         try {
-            ElectrumServer.BroadcastTransactionService broadcastService =
-                    new ElectrumServer.BroadcastTransactionService(tx, fee);
+            ElectrumServer.BroadcastTransactionService broadcastService = new ElectrumServer.BroadcastTransactionService(
+                    tx, fee);
 
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
