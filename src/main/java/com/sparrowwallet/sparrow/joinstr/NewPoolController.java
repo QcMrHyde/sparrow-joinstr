@@ -115,7 +115,7 @@ public class NewPoolController extends JoinstrFormController {
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
 
                 // Start CoinjoinHandler for pool creator flow
-                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString());
+                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString(), wallet);
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
@@ -140,7 +140,8 @@ public class NewPoolController extends JoinstrFormController {
     /**
      * Start CoinjoinHandler for pool creator after pool is created
      */
-    private void startCreatorCoinjoinFlow(JoinstrPool pool, String poolPrivateKey, String myOutputAddress) {
+    private void startCreatorCoinjoinFlow(JoinstrPool pool, String poolPrivateKey, String myOutputAddress,
+            Wallet wallet) {
         try {
             Identity poolIdentity = Identity.create(poolPrivateKey);
 
@@ -148,6 +149,11 @@ public class NewPoolController extends JoinstrFormController {
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, status -> {
                 logger.info("Pool creator status: " + status);
                 // Update pool status in UI if needed
+            });
+
+            // Set callback to show UTXO selection dialog when all outputs collected
+            coinjoinHandler.setOnReadyForInputCallback(() -> {
+                showUtxoSelectionDialog(wallet);
             });
 
             // Start output phase with creator's output address
@@ -168,6 +174,43 @@ public class NewPoolController extends JoinstrFormController {
         } catch (Exception e) {
             logger.severe("Error starting creator coinjoin flow: " + e.getMessage());
             showError("Error starting coinjoin: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Show UTXO selection dialog and register input with selected UTXO
+     */
+    private void showUtxoSelectionDialog(Wallet wallet) {
+        try {
+            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            dialog.setTitle("Select UTXO for Coinjoin");
+            dialog.showAndWait();
+
+            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
+                    .getSelectedUtxos();
+
+            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
+                // Get first selected UTXO
+                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
+                        .next();
+
+                // Get the WalletNode for this UTXO
+                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
+                        .getWalletUtxos();
+                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
+
+                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
+                        + selectedUtxo.getValue());
+
+                // Register the input
+                coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
+            } else {
+                logger.warning("No UTXO selected, input registration cancelled");
+            }
+        } catch (Exception e) {
+            logger.severe("Error showing UTXO dialog: " + e.getMessage());
+            e.printStackTrace();
+            showError("Error: " + e.getMessage());
         }
     }
 

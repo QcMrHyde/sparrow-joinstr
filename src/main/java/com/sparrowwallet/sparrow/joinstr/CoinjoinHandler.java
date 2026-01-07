@@ -56,6 +56,7 @@ public class CoinjoinHandler {
     private Wallet wallet;
     private Storage storage;
     private NostrListener messageListener;
+    private Runnable onReadyForInputCallback;
 
     public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.poolIdentity = poolIdentity;
@@ -163,7 +164,10 @@ public class CoinjoinHandler {
                 if (outputAddresses.size() == numPeers) {
                     logger.info("All outputs collected, ready for input registration");
                     updateStatus("Select UTXO for input");
-                    // The UI will trigger startInputPhase() when user selects a UTXO
+                    // Trigger callback to show UTXO selection dialog
+                    if (onReadyForInputCallback != null) {
+                        Platform.runLater(onReadyForInputCallback);
+                    }
                 }
             }
         } catch (Exception e) {
@@ -452,5 +456,13 @@ public class CoinjoinHandler {
 
     public boolean isReadyForInputPhase() {
         return outputAddresses.size() == numPeers;
+    }
+
+    public void setOnReadyForInputCallback(Runnable callback) {
+        this.onReadyForInputCallback = callback;
+    }
+
+    public Wallet getWallet() {
+        return wallet;
     }
 }

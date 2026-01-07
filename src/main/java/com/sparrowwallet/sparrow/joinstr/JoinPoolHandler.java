@@ -155,6 +155,12 @@ public class JoinPoolHandler {
             // Create CoinjoinHandler with pool identity
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, statusCallback);
 
+            // Set callback to show UTXO selection dialog when all outputs collected
+            final com.sparrowwallet.drongo.wallet.Wallet walletRef = wallet;
+            coinjoinHandler.setOnReadyForInputCallback(() -> {
+                showUtxoSelectionDialog(walletRef);
+            });
+
             // Start output phase
             coinjoinHandler.startOutputPhase(myOutputAddress.toString());
             logger.info("Started coinjoin flow with output address: " + myOutputAddress);
@@ -192,6 +198,47 @@ public class JoinPoolHandler {
      */
     public CoinjoinHandler getCoinjoinHandler() {
         return coinjoinHandler;
+    }
+
+    /**
+     * Show UTXO selection dialog and register input with selected UTXO
+     */
+    private void showUtxoSelectionDialog(com.sparrowwallet.drongo.wallet.Wallet wallet) {
+        try {
+            // Filter UTXOs by pool denomination
+            long poolAmountSats = coinjoinHandler.getPoolAmountSats();
+
+            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            dialog.setTitle("Select UTXO for Coinjoin");
+            dialog.showAndWait();
+
+            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
+                    .getSelectedUtxos();
+
+            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
+                // Get first selected UTXO
+                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
+                        .next();
+
+                // Get the WalletNode for this UTXO
+                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
+                        .getWalletUtxos();
+                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
+
+                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
+                        + selectedUtxo.getValue());
+
+                // Register the input
+                coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
+            } else {
+                logger.warning("No UTXO selected, input registration cancelled");
+                Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
+            }
+        } catch (Exception e) {
+            logger.severe("Error showing UTXO dialog: " + e.getMessage());
+            e.printStackTrace();
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
+        }
     }
 
     public void stop() {
