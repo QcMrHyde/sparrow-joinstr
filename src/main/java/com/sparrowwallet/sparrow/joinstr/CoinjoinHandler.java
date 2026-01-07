@@ -192,13 +192,27 @@ public class CoinjoinHandler {
             updateStatus("Signing PSBT");
             signPSBT(psbt, selectedUtxo, utxoNode);
 
+            // Verify signing worked
+            PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
+            logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
+                    ", isFinalized: " + psbtInput.isFinalized() +
+                    ", partialSigs: "
+                    + (psbtInput.getPartialSignatures() != null ? psbtInput.getPartialSignatures().size() : 0));
+
+            if (!psbtInput.isSigned() && !psbtInput.isFinalized()) {
+                logger.severe("PSBT signing failed - no signatures present");
+                updateStatus("Error: Signing failed");
+                return;
+            }
+
             // Serialize and send
             byte[] psbtBytes = psbt.serialize();
             myPsbtBase64 = Base64.toBase64String(psbtBytes);
             inputPSBTs.add(myPsbtBase64);
 
+            logger.info("Sending signed PSBT to pool, size: " + psbtBytes.length + " bytes");
             sendInputToPool(myPsbtBase64);
-            updateStatus("Input sent, waiting for peers");
+            updateStatus("Input sent, waiting for peers (" + inputPSBTs.size() + "/" + numPeers + ")");
 
         } catch (Exception e) {
             logger.severe("Error in input phase: " + e.getMessage());
@@ -238,14 +252,36 @@ public class CoinjoinHandler {
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
             psbtInput.setSigHash(SigHash.ANYONECANPAY_ALL);
 
-            // Add witness UTXO for signing
-            if (wallet != null) {
+            // Add witness UTXO and derivation info for signing
+            if (wallet != null && utxoNode != null) {
                 Transaction utxoTx = wallet.getTransactions().get(utxo.getHash()).getTransaction();
                 TransactionOutput witnessUtxo = utxoTx.getOutputs().get((int) utxo.getIndex());
                 psbtInput.setWitnessUtxo(witnessUtxo);
 
-                // Add key derivation info for signing
-                // This is needed for the wallet to know which key to use
+                // Add key derivation info for each keystore
+                // This is needed for the wallet to know which key to use for signing
+                Map<com.sparrowwallet.drongo.crypto.ECKey, com.sparrowwallet.drongo.KeyDerivation> derivedPublicKeys = new java.util.LinkedHashMap<>();
+
+                for (com.sparrowwallet.drongo.wallet.Keystore keystore : wallet.getKeystores()) {
+                    com.sparrowwallet.drongo.crypto.ECKey pubKey = keystore.getPubKey(utxoNode);
+                    com.sparrowwallet.drongo.crypto.ECKey outputKey = wallet.getScriptType().getOutputKey(pubKey);
+                    com.sparrowwallet.drongo.KeyDerivation derivation = keystore.getKeyDerivation()
+                            .extend(utxoNode.getDerivation());
+                    derivedPublicKeys.put(outputKey, derivation);
+                    logger.info("Added derivation for key: " + outputKey.getPublicKeyAsHex() + " path: "
+                            + derivation.getDerivationPath());
+                }
+
+                psbtInput.setDerivedPublicKeys(derivedPublicKeys);
+
+                // For P2WPKH/P2SH-P2WPKH, also set redeem script if needed
+                if (wallet.getScriptType() == com.sparrowwallet.drongo.protocol.ScriptType.P2SH_P2WPKH) {
+                    Script redeemScript = wallet.getScriptType().getOutputScript(
+                            wallet.getKeystores().get(0).getPubKey(utxoNode));
+                    psbtInput.setRedeemScript(redeemScript);
+                }
+
+                logger.info("PSBT input created with derivation info for signing");
             }
 
             return psbt;
@@ -258,28 +294,44 @@ public class CoinjoinHandler {
     }
 
     private void signPSBT(PSBT psbt, BlockTransactionHashIndex utxo, WalletNode utxoNode) {
-        // For now, we'll use a simple approach - the PSBT needs to be signed by the
-        // wallet
-        // In Sparrow, this typically happens through the UI or via FinalizingPSBTWallet
-        //
-        // For a hot wallet with software keys, we can attempt to sign directly
-        // For hardware wallets, this would need to go through the device signing flow
-
         try {
-            // Try to finalize using the wallet's signing capability
-            if (wallet != null && wallet.isValid() && !wallet.getKeystores().isEmpty()) {
-                // The wallet should be able to sign if it has the private keys
-                // This is a simplified approach - full implementation would handle different
-                // keystore types
+            if (wallet == null || !wallet.isValid() || wallet.getKeystores().isEmpty()) {
+                logger.severe("No valid wallet available for signing");
+                updateStatus("Error: No wallet for signing");
+                return;
+            }
 
-                logger.info("Attempting to sign PSBT...");
-                // Note: Full signing implementation depends on keystore type
-                // For software wallets, Sparrow uses wallet.sign() methods
-                // For now, log that signing would happen here
-                logger.info("PSBT signing - wallet type: " + wallet.getKeystores().get(0).getSource());
+            // Check if wallet has private keys (software wallet)
+            boolean hasPrivateKeys = wallet.getKeystores().stream()
+                    .anyMatch(keystore -> keystore.hasPrivateKey());
+
+            if (hasPrivateKeys) {
+                logger.info("Signing PSBT with software wallet...");
+
+                // For encrypted wallets, we need to get the decrypted version
+                // For now, assume unencrypted wallet (will need password dialog for encrypted)
+                if (wallet.isEncrypted()) {
+                    logger.warning("Wallet is encrypted - signing may require password dialog");
+                    // In production, would need to show WalletPasswordDialog
+                }
+
+                // Sign the PSBT
+                wallet.sign(psbt);
+
+                // Finalize the input
+                PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
+                psbtInput.finalise();
+
+                logger.info("PSBT signed successfully");
+            } else {
+                // Hardware wallet - would need device signing
+                logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
+                updateStatus("Error: Hardware wallet signing not supported yet");
             }
         } catch (Exception e) {
             logger.severe("Error signing PSBT: " + e.getMessage());
+            e.printStackTrace();
+            updateStatus("Error signing: " + e.getMessage());
         }
     }
 
