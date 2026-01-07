@@ -252,36 +252,13 @@ public class CoinjoinHandler {
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
             psbtInput.setSigHash(SigHash.ANYONECANPAY_ALL);
 
-            // Add witness UTXO and derivation info for signing
-            if (wallet != null && utxoNode != null) {
+            // Add witness UTXO for signing (required for segwit)
+            // NO derivation paths for privacy in coinjoin!
+            if (wallet != null) {
                 Transaction utxoTx = wallet.getTransactions().get(utxo.getHash()).getTransaction();
                 TransactionOutput witnessUtxo = utxoTx.getOutputs().get((int) utxo.getIndex());
                 psbtInput.setWitnessUtxo(witnessUtxo);
-
-                // Add key derivation info for each keystore
-                // This is needed for the wallet to know which key to use for signing
-                Map<com.sparrowwallet.drongo.crypto.ECKey, com.sparrowwallet.drongo.KeyDerivation> derivedPublicKeys = new java.util.LinkedHashMap<>();
-
-                for (com.sparrowwallet.drongo.wallet.Keystore keystore : wallet.getKeystores()) {
-                    com.sparrowwallet.drongo.crypto.ECKey pubKey = keystore.getPubKey(utxoNode);
-                    com.sparrowwallet.drongo.crypto.ECKey outputKey = wallet.getScriptType().getOutputKey(pubKey);
-                    com.sparrowwallet.drongo.KeyDerivation derivation = keystore.getKeyDerivation()
-                            .extend(utxoNode.getDerivation());
-                    derivedPublicKeys.put(outputKey, derivation);
-                    logger.info("Added derivation for key: " + outputKey.getPublicKeyAsHex() + " path: "
-                            + derivation.getDerivationPath());
-                }
-
-                psbtInput.setDerivedPublicKeys(derivedPublicKeys);
-
-                // For P2WPKH/P2SH-P2WPKH, also set redeem script if needed
-                if (wallet.getScriptType() == com.sparrowwallet.drongo.protocol.ScriptType.P2SH_P2WPKH) {
-                    Script redeemScript = wallet.getScriptType().getOutputScript(
-                            wallet.getKeystores().get(0).getPubKey(utxoNode));
-                    psbtInput.setRedeemScript(redeemScript);
-                }
-
-                logger.info("PSBT input created with derivation info for signing");
+                logger.info("PSBT created with witness UTXO, no derivation paths (privacy)");
             }
 
             return psbt;
@@ -315,14 +292,16 @@ public class CoinjoinHandler {
                     // In production, would need to show WalletPasswordDialog
                 }
 
-                // Sign the PSBT
+                // Sign the PSBT using wallet's signing capability
                 wallet.sign(psbt);
 
-                // Finalize the input
+                // Verify the PSBT is signed
                 PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
-                psbtInput.finalise();
-
-                logger.info("PSBT signed successfully");
+                if (psbtInput.isSigned()) {
+                    logger.info("PSBT signed successfully");
+                } else {
+                    logger.warning("PSBT signing may not have completed");
+                }
             } else {
                 // Hardware wallet - would need device signing
                 logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
