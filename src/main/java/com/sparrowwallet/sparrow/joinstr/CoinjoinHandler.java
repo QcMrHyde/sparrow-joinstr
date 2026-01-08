@@ -327,7 +327,31 @@ public class CoinjoinHandler {
                     ", hasFinalWitness: " + (psbtInput.getFinalScriptWitness() != null));
 
             if (psbtInput.isSigned()) {
-                logger.info("PSBT signed successfully");
+                logger.info("PSBT signed successfully, now creating witness...");
+                // For P2WPKH, we need to create the finalScriptWitness manually
+                // The witness structure is: [signature, pubkey]
+                if (!psbtInput.getPartialSignatures().isEmpty()) {
+                    try {
+                        // Get the first (and only for single-sig) partial signature
+                        var sigEntry = psbtInput.getPartialSignatures().entrySet().iterator().next();
+                        com.sparrowwallet.drongo.crypto.ECKey pubKey = sigEntry.getKey();
+                        com.sparrowwallet.drongo.protocol.TransactionSignature sig = sigEntry.getValue();
+
+                        // Create the witness using the constructor that creates [signature, pubkey]
+                        com.sparrowwallet.drongo.protocol.TransactionWitness witness = new com.sparrowwallet.drongo.protocol.TransactionWitness(
+                                psbt.getTransaction(), pubKey, sig);
+
+                        // Set as final witness
+                        psbtInput.setFinalScriptWitness(witness);
+
+                        logger.info("Created finalScriptWitness - isFinalized: " + psbtInput.isFinalized() +
+                                ", hasFinalWitness: " + (psbtInput.getFinalScriptWitness() != null) +
+                                ", pushCount: " + witness.getPushCount());
+                    } catch (Exception e) {
+                        logger.warning("Could not create witness: " + e.getMessage());
+                        e.printStackTrace();
+                    }
+                }
             } else {
                 logger.warning("PSBT signing may not have completed - no signatures found");
             }
@@ -483,11 +507,52 @@ public class CoinjoinHandler {
                 inputIndex++;
             }
 
-            // Log combined PSBT state
+            // Log combined PSBT state and finalize each input
             for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
                 PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
-                logger.info("Combined input " + i + ": isSigned=" + input.isSigned() +
-                        ", isFinalized=" + input.isFinalized());
+                logger.info("Combined input " + i + " before finalize: isSigned=" + input.isSigned() +
+                        ", isFinalized=" + input.isFinalized() +
+                        ", hasFinalWitness=" + (input.getFinalScriptWitness() != null) +
+                        ", partialSigs="
+                        + (input.getPartialSignatures() != null ? input.getPartialSignatures().size() : 0));
+            }
+
+            // Finalize each input by creating witness from partial signatures if needed
+            for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
+                PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
+
+                // If already finalized (has witness), skip
+                if (input.getFinalScriptWitness() != null) {
+                    logger.info("Input " + i + " already has finalScriptWitness");
+                    continue;
+                }
+
+                // If has partial signatures, create witness
+                if (input.getPartialSignatures() != null && !input.getPartialSignatures().isEmpty()) {
+                    try {
+                        var sigEntry = input.getPartialSignatures().entrySet().iterator().next();
+                        com.sparrowwallet.drongo.crypto.ECKey pubKey = sigEntry.getKey();
+                        com.sparrowwallet.drongo.protocol.TransactionSignature sig = sigEntry.getValue();
+
+                        // Use the correct constructor that creates [signature, pubkey]
+                        com.sparrowwallet.drongo.protocol.TransactionWitness witness = new com.sparrowwallet.drongo.protocol.TransactionWitness(
+                                combinedPsbt.getTransaction(), pubKey, sig);
+
+                        input.setFinalScriptWitness(witness);
+                        logger.info("Created witness for input " + i + ", pushCount: " + witness.getPushCount());
+                    } catch (Exception e) {
+                        logger.warning("Could not create witness for input " + i + ": " + e.getMessage());
+                    }
+                } else {
+                    logger.warning("Input " + i + " has no partial signatures to finalize!");
+                }
+            }
+
+            // Log state after finalization
+            for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
+                PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
+                logger.info("Combined input " + i + " after finalize: isFinalized=" + input.isFinalized() +
+                        ", hasFinalWitness=" + (input.getFinalScriptWitness() != null));
             }
 
             // Calculate the fee
