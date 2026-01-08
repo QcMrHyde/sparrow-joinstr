@@ -243,8 +243,17 @@ public class CoinjoinHandler {
             logger.info("Creating PSBT: pool=" + poolAmountSats + " sats, fee/output=" + feePerOutput + ", output="
                     + outputAmount);
 
-            // Add outputs for all participants
-            for (String addr : outputAddresses) {
+            // CRITICAL: Sort output addresses to ensure all participants have the same
+            // ordering.
+            // Without this, each participant receives outputs in different Nostr arrival
+            // order,
+            // causing different signature hashes and verification failures.
+            List<String> sortedOutputs = new ArrayList<>(outputAddresses);
+            Collections.sort(sortedOutputs);
+            logger.info("Sorted " + sortedOutputs.size() + " output addresses for deterministic ordering");
+
+            // Add outputs for all participants in sorted order
+            for (String addr : sortedOutputs) {
                 Address address = Address.fromString(addr);
                 tx.addOutput(outputAmount, address.getOutputScript());
             }
