@@ -1,8 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.google.gson.Gson;
 import com.sparrowwallet.sparrow.io.Config;
-import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolStoreWrapper;
 
 import java.io.File;
 import java.io.FileNotFoundException;
@@ -101,9 +99,7 @@ public class JoinstrPool {
         scanner.close();
 
         try {
-            Gson gson = new Gson();
-            JoinstrPoolStoreWrapper psWrapper = gson.fromJson(text.toString(), JoinstrPoolStoreWrapper.class);
-            Config.get().setPoolStore(psWrapper.poolsList);
+            Config.get().setPoolStore(JoinstrPoolSerializer.fromJson(text.toString()));
         } catch (Exception e) {
             throw new RuntimeException(e);
         }
@@ -126,8 +122,7 @@ public class JoinstrPool {
 
     public static void savePoolsFile(String filePath) throws IOException {
 
-        Gson gson = new Gson();
-        String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(Config.get().getPoolStore()));
+        String poolsJson = JoinstrPoolSerializer.toJson(Config.get().getPoolStore());
         FileWriter writer = new FileWriter(filePath);
         writer.write(poolsJson);
         writer.close();

@@ -14,9 +14,9 @@ import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
-import com.sparrowwallet.sparrow.EventManager;
-import com.sparrowwallet.sparrow.event.WalletHistoryFinishedEvent;
 import com.sparrowwallet.sparrow.io.Storage;
+import com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog;
+import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.net.ElectrumServer;
 import javafx.application.Platform;
 import nostr.api.NIP04;
@@ -42,7 +42,6 @@ public class CoinjoinHandler {
     private static final Logger logger = Logger.getLogger(CoinjoinHandler.class.getName());
 
     private final Identity poolIdentity;
-    private final JoinstrPool pool;
     private final String relay;
     private final int numPeers;
     private final long poolAmountSats;
@@ -50,43 +49,42 @@ public class CoinjoinHandler {
     private final Consumer<String> statusCallback;
 
     private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
+    public int getOutputAddressesSize() {
+        return outputAddresses.size();
+    }
     private final List<String> inputPSBTs = new CopyOnWriteArrayList<>();
     private String myOutputAddress;
     private String myPsbtBase64;
-
-    private Wallet wallet;
-    private Storage storage;
+    private final Wallet wallet;
     private NostrListener messageListener;
     private Runnable onReadyForInputCallback;
 
-    public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
+    public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Consumer<String> statusCallback) throws Exception {
         this.poolIdentity = poolIdentity;
-        this.pool = pool;
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
 
-        // Parse peers count
-        String peersStr = pool.getPeers();
-        if (peersStr.contains("/")) {
-            this.numPeers = (int) Double.parseDouble(peersStr.split("/")[1].trim());
-        } else {
-            this.numPeers = (int) Double.parseDouble(peersStr.trim());
-        }
-
-        // Parse denomination (BTC to sats) - strip " BTC" suffix if present
-        String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
-        this.poolAmountSats = (long) (Double.parseDouble(denomStr) * 100_000_000);
+        this.numPeers = Integer.parseInt(pool.getPeers());
+        this.poolAmountSats = (long) (Double.parseDouble(pool.getDenomination()) * 100_000_000);
 
         // Fee rate (default 1 sat/vbyte if not set)
         this.feeRate = 1;
 
-        // Get wallet reference
         Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
-        if (!openWallets.isEmpty()) {
-            Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-            this.wallet = firstWallet.getKey();
-            this.storage = firstWallet.getValue();
+        Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet;
+
+        if (openWallets.isEmpty()) {
+            throw new Exception("No wallet found. Please open a wallet in Sparrow first.");
+        } else if(openWallets.keySet().stream().filter(Wallet::isValid).count() > 1) {
+            WalletSelectionDialog walletSelectionDialog = new WalletSelectionDialog(openWallets);
+            walletSelectionDialog.showAndWait();
+            selectedWallet = walletSelectionDialog.getSelectedWallet();
+        } else {
+            selectedWallet = openWallets.entrySet().iterator().next();
         }
+
+        this.wallet = selectedWallet.getKey();
+
     }
 
     /**
@@ -186,7 +184,7 @@ public class CoinjoinHandler {
         updateStatus("Creating PSBT");
 
         try {
-            PSBT psbt = createCoinjoinPSBT(selectedUtxo, utxoNode);
+            PSBT psbt = createCoinjoinPSBT(selectedUtxo);
             if (psbt == null) {
                 updateStatus("Error: Failed to create PSBT");
                 return;
@@ -225,7 +223,7 @@ public class CoinjoinHandler {
         }
     }
 
-    private PSBT createCoinjoinPSBT(BlockTransactionHashIndex utxo, WalletNode utxoNode) {
+    private PSBT createCoinjoinPSBT(BlockTransactionHashIndex utxo) {
         try {
             Transaction tx = new Transaction();
             tx.setVersion(2);
@@ -658,23 +656,6 @@ public class CoinjoinHandler {
         }
     }
 
-    // Getters for UI access
-    public List<String> getOutputAddresses() {
-        return new ArrayList<>(outputAddresses);
-    }
-
-    public int getNumPeers() {
-        return numPeers;
-    }
-
-    public long getPoolAmountSats() {
-        return poolAmountSats;
-    }
-
-    public boolean isReadyForInputPhase() {
-        return outputAddresses.size() == numPeers;
-    }
-
     public void setOnReadyForInputCallback(Runnable callback) {
         this.onReadyForInputCallback = callback;
     }
@@ -682,4 +663,43 @@ public class CoinjoinHandler {
     public Wallet getWallet() {
         return wallet;
     }
+
+    /**
+     * Show UTXO selection dialog and register input with selected UTXO
+     */
+    public void showUtxoSelectionDialog(com.sparrowwallet.drongo.wallet.Wallet wallet) {
+        try {
+            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            dialog.setTitle("Select UTXO for Coinjoin");
+            dialog.showAndWait();
+
+            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
+                    .getSelectedUtxos();
+
+            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
+                // Get first selected UTXO
+                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
+                        .next();
+
+                // Get the WalletNode for this UTXO
+                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
+                        .getWalletUtxos();
+                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
+
+                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
+                        + selectedUtxo.getValue());
+
+                // Register the input
+                startInputPhase(selectedUtxo, utxoNode);
+            } else {
+                logger.warning("No UTXO selected, input registration cancelled");
+                Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
+            }
+        } catch (Exception e) {
+            logger.severe("Error showing UTXO dialog: " + e.getMessage());
+            e.printStackTrace();
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
+        }
+    }
+
 }

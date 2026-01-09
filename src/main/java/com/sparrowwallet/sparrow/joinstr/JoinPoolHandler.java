@@ -12,17 +12,11 @@ import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import javafx.application.Platform;
-import nostr.api.NIP04;
-import nostr.event.BaseTag;
-import nostr.event.impl.GenericEvent;
-import nostr.event.Kind;
-import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
 import java.lang.reflect.Type;
 import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Semaphore;
@@ -39,13 +33,12 @@ public class JoinPoolHandler implements IThreadExecutor {
     private final String relay;
     private NostrListener credentialsListener;
     private Identity poolIdentity;
-    private final int numPeers;
     private final Consumer<String> statusCallback;
     private CoinjoinHandler coinjoinHandler;
     private final AtomicBoolean isOutputRegistered;
     private final AtomicBoolean isCredentialsReceived = new AtomicBoolean(false);
 
-    private Semaphore semaphore = new Semaphore(1);
+    private transient Semaphore semaphore;
 
     private ExecutorService threadPool = Executors.newFixedThreadPool(10, r -> {
         Thread t = Executors.defaultThreadFactory().newThread(r);
@@ -58,12 +51,14 @@ public class JoinPoolHandler implements IThreadExecutor {
         this.pool = pool;
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
-        this.numPeers = Integer.parseInt(pool.getPeers());
         this.isOutputRegistered = new AtomicBoolean(false);
     }
 
     public int getConnectedPeers() {
-        return 0; // TODO fix, was "outputAddresses.size();"
+        int connectedPeers = 0;
+        if(coinjoinHandler != null)
+            connectedPeers = coinjoinHandler.getOutputAddressesSize();
+        return connectedPeers;
     }
 
     /**
@@ -78,6 +73,7 @@ public class JoinPoolHandler implements IThreadExecutor {
                 Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
                 credentialsListener = new NostrListener(joinIdentity, relay, null);
+                semaphore = new Semaphore(1);
 
                 credentialsListener.startListening(decryptedMessage -> {
                     try {
@@ -217,7 +213,7 @@ public class JoinPoolHandler implements IThreadExecutor {
             // Set callback to show UTXO selection dialog when all outputs collected
             final com.sparrowwallet.drongo.wallet.Wallet walletRef = wallet;
             coinjoinHandler.setOnReadyForInputCallback(() -> {
-                showUtxoSelectionDialog(walletRef);
+                coinjoinHandler.showUtxoSelectionDialog(walletRef);
             });
 
             // Start output phase
@@ -226,75 +222,6 @@ public class JoinPoolHandler implements IThreadExecutor {
 
         } catch (Exception e) {
             logger.severe("Error starting coinjoin flow: " + e.getMessage());
-            e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
-        }
-    }
-
-    /**
-     * Trigger input registration with selected UTXO.
-     * Called by UI when user selects a UTXO.
-     */
-    public void registerInput(com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex utxo,
-            com.sparrowwallet.drongo.wallet.WalletNode utxoNode) {
-        if (coinjoinHandler != null) {
-            coinjoinHandler.startInputPhase(utxo, utxoNode);
-        } else {
-            logger.severe("CoinjoinHandler not initialized");
-            Platform.runLater(() -> statusCallback.accept("Error: Handler not ready"));
-        }
-    }
-
-    /**
-     * Check if ready for input registration (all outputs collected)
-     */
-    public boolean isReadyForInputPhase() {
-        return coinjoinHandler != null && coinjoinHandler.isReadyForInputPhase();
-    }
-
-    /**
-     * Get the CoinjoinHandler for UI access
-     */
-    public CoinjoinHandler getCoinjoinHandler() {
-        return coinjoinHandler;
-    }
-
-    /**
-     * Show UTXO selection dialog and register input with selected UTXO
-     */
-    private void showUtxoSelectionDialog(com.sparrowwallet.drongo.wallet.Wallet wallet) {
-        try {
-            // Filter UTXOs by pool denomination
-            long poolAmountSats = coinjoinHandler.getPoolAmountSats();
-
-            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
-            dialog.setTitle("Select UTXO for Coinjoin");
-            dialog.showAndWait();
-
-            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
-                    .getSelectedUtxos();
-
-            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
-                // Get first selected UTXO
-                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
-                        .next();
-
-                // Get the WalletNode for this UTXO
-                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
-                        .getWalletUtxos();
-                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
-
-                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
-                        + selectedUtxo.getValue());
-
-                // Register the input
-                coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
-            } else {
-                logger.warning("No UTXO selected, input registration cancelled");
-                Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
-            }
-        } catch (Exception e) {
-            logger.severe("Error showing UTXO dialog: " + e.getMessage());
             e.printStackTrace();
             Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
