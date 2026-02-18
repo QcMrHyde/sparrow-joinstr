@@ -5,7 +5,7 @@ import com.sparrowwallet.sparrow.wallet.WalletForm;
 
 import javafx.scene.control.Alert;
 
-public abstract class JoinstrFormController extends BaseController {
+public abstract class JoinstrFormController extends BaseController implements AutoCloseable {
 
     private JoinstrController joinstrController;
     private JoinstrForm joinstrForm;
@@ -31,6 +31,8 @@ public abstract class JoinstrFormController extends BaseController {
     }
 
     public abstract void initializeView();
+
+    public abstract void refreshView();
 
     protected void showError(String message) {
         Alert alert = new Alert(Alert.AlertType.ERROR);

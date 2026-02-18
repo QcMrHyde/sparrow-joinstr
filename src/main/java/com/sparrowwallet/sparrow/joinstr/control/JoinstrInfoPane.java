@@ -11,10 +11,6 @@ import javafx.scene.layout.VBox;
 
 public class JoinstrInfoPane extends VBox {
 
-    private Label titleLabel;
-    private Label relayLabel;
-    private Label pubkeyLabel;
-    private Label denominationLabel;
     private Label relayValueLabel;
     private Label pubkeyValueLabel;
     private Label denominationValueLabel;
@@ -28,7 +24,7 @@ public class JoinstrInfoPane extends VBox {
     }
 
     public void initInfoPane() {
-        titleLabel = new Label("Selected Pool Details");
+        Label titleLabel = new Label("Selected Pool Details");
         titleLabel.getStyleClass().add("sub-title");
         getChildren().add(titleLabel);
 
@@ -42,15 +38,15 @@ public class JoinstrInfoPane extends VBox {
         column2.setPrefWidth(400);
         detailsGrid.getColumnConstraints().addAll(column1, column2);
 
-        relayLabel = new Label("Relay:");
+        Label relayLabel = new Label("Relay:");
         relayLabel.getStyleClass().add("text-grey");
         relayValueLabel = new Label();
 
-        pubkeyLabel = new Label("Pubkey:");
+        Label pubkeyLabel = new Label("Pubkey:");
         pubkeyLabel.getStyleClass().add("text-grey");
         pubkeyValueLabel = new Label();
 
-        denominationLabel = new Label("Denomination:");
+        Label denominationLabel = new Label("Denomination:");
         denominationLabel.getStyleClass().add("text-grey");
         denominationValueLabel = new Label();
 
