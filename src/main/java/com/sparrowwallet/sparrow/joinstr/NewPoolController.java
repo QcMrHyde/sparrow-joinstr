@@ -16,13 +16,20 @@ import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
 import java.util.Locale;
 import java.util.Map;
+import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
 import javafx.scene.control.TextField;
 
 import nostr.event.impl.GenericEvent;
+import nostr.id.Identity;
+import com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog;
 
 public class NewPoolController extends JoinstrFormController {
+
+    private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
+
+    private CoinjoinHandler coinjoinHandler;
 
     @FXML
     private TextField denominationField;
@@ -70,8 +77,8 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 int peersValue = Integer.parseInt(peers);
-                if (peersValue <= 2) {
-                    showError("Number of peers must be greater than 2");
+                if (peersValue <= 1) {
+                    showError("Number of peers must be greater than 1");
                     return;
                 }
             } catch (NumberFormatException e) {
@@ -130,7 +137,8 @@ public class NewPoolController extends JoinstrFormController {
                 getJoinstrController().setSelectedPool(pool);
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
 
-                pool.startListeningForCredentials(pool.getJoinstrIdentity());
+                // Start CoinjoinHandler for pool creator flow
+                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString(), wallet, storage);
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
@@ -146,22 +154,82 @@ public class NewPoolController extends JoinstrFormController {
                             "\nPeers: " + peers +
                             "\n\nWaiting for peers to join...");
 
-            /*
-             * Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
-             * 
-             * for (Map.Entry<BlockTransactionHashIndex, WalletNode> entry :
-             * utxos.entrySet()) {
-             * BlockTransactionHashIndex utxo = entry.getKey();
-             * WalletNode node = entry.getValue();
-             * }
-             * 
-             * UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
-             * dialog.showAndWait();
-             */
-
         } catch (Exception e) {
             showError("Error: " + e.getMessage());
         }
+    }
+
+    /**
+     * Start CoinjoinHandler for pool creator after pool is created
+     */
+    private void startCreatorCoinjoinFlow(JoinstrPool pool, String poolPrivateKey, String myOutputAddress,
+            Wallet wallet, Storage storage) {
+        try {
+            Identity poolIdentity = Identity.create(poolPrivateKey);
+
+            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, status -> {
+                logger.info("Pool creator status: " + status);
+            });
+
+            coinjoinHandler.setOnReadyForInputCallback(() -> {
+                showUtxoSelectionDialog(wallet);
+            });
+
+            coinjoinHandler.startOutputPhase(myOutputAddress);
+            logger.info("Pool creator started coinjoin flow with output: " + myOutputAddress);
+
+            Map<String, String> poolCredentials = new java.util.HashMap<>();
+            poolCredentials.put("id", pool.getPubkey());
+            poolCredentials.put("private_key", poolPrivateKey);
+            poolCredentials.put("relay", pool.getRelay());
+            poolCredentials.put("public_key", pool.getPubkey());
+            poolCredentials.put("peers", pool.getPeers());
+            poolCredentials.put("timeout", pool.getTimeout());
+
+            shareCredentials(poolIdentity, pool.getRelay(), poolCredentials);
+
+        } catch (Exception e) {
+            logger.severe("Error starting creator coinjoin flow: " + e.getMessage());
+            showError("Error starting coinjoin: " + e.getMessage());
+        }
+    }
+
+    /**
+     * Show UTXO selection dialog and register input with selected UTXO
+     */
+    private void showUtxoSelectionDialog(Wallet wallet) {
+        try {
+            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            dialog.setTitle("Select UTXO for Coinjoin");
+            dialog.showAndWait();
+
+            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
+                    .getSelectedUtxos();
+
+            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
+                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
+                        .next();
+
+                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
+                        .getWalletUtxos();
+                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
+
+                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
+                        + selectedUtxo.getValue());
+
+                coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
+            } else {
+                logger.warning("No UTXO selected, input registration cancelled");
+            }
+        } catch (Exception e) {
+            logger.severe("Error showing UTXO dialog: " + e.getMessage());
+            e.printStackTrace();
+            showError("Error: " + e.getMessage());
+        }
+    }
+
+    public CoinjoinHandler getCoinjoinHandler() {
+        return coinjoinHandler;
     }
 
     private void updatePoolStore(JoinstrPool pool) throws IOException {
@@ -174,5 +242,14 @@ public class NewPoolController extends JoinstrFormController {
 
         JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
 
+    }
+
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials) {
+
+        NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
+
+        listener.startListening(decryptedMessage -> {
+            logger.info("Received message: " + decryptedMessage);
+        });
     }
 }

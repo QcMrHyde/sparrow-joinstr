@@ -111,6 +111,22 @@ public class JoinstrPool {
         return joinstrIdentity;
     }
 
+    public int getParsedPeers() {
+        if (peers == null || peers.get().trim().isEmpty()) {
+            return 0;
+        }
+        try {
+            if (peers.get().contains("/")) {
+                String[] parts = peers.get().split("/");
+                return Integer.parseInt(parts[1].trim());
+            } else {
+                return Integer.parseInt(peers.get().trim());
+            }
+        } catch (Exception e) {
+            return 0;
+        }
+    }
+
     public String getStatus() {
         return status.get();
     }
