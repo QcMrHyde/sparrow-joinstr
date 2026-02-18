@@ -1,7 +1,6 @@
 open module com.sparrowwallet.sparrow {
     requires java.desktop;
     requires java.net.http;
-    requires java.sql;
     requires javafx.base;
     requires javafx.controls;
     requires javafx.fxml;
@@ -67,4 +66,6 @@ open module com.sparrowwallet.sparrow {
     requires nostr.context;
     requires nostr.context.impl;
     requires io.github.doblon8.jzbar;
+    requires org.bouncycastle.provider;
+    requires java.sql;
 }
