@@ -156,7 +156,7 @@ public class JoinPoolHandler {
             Address myOutputAddress = freshEntry.getAddress();
 
             // Create CoinjoinHandler with pool identity
-            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, statusCallback);
+            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, statusCallback);
 
             // Set callback to show UTXO selection dialog when all outputs collected
             final com.sparrowwallet.drongo.wallet.Wallet walletRef = wallet;

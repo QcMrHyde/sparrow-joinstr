@@ -138,7 +138,7 @@ public class NewPoolController extends JoinstrFormController {
                 getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
 
                 // Start CoinjoinHandler for pool creator flow
-                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString(), wallet);
+                startCreatorCoinjoinFlow(pool, poolPrivateKey, bitcoinAddress.toString(), wallet, storage);
 
             } catch (Exception e) {
                 showError("Error: " + e.getMessage());
@@ -163,12 +163,12 @@ public class NewPoolController extends JoinstrFormController {
      * Start CoinjoinHandler for pool creator after pool is created
      */
     private void startCreatorCoinjoinFlow(JoinstrPool pool, String poolPrivateKey, String myOutputAddress,
-            Wallet wallet) {
+            Wallet wallet, Storage storage) {
         try {
             Identity poolIdentity = Identity.create(poolPrivateKey);
 
             // Create CoinjoinHandler with status callback
-            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, status -> {
+            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, status -> {
                 logger.info("Pool creator status: " + status);
                 // Update pool status in UI if needed
             });

@@ -62,11 +62,14 @@ public class CoinjoinHandler {
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
-    public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
+    public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Wallet wallet, Storage storage,
+            Consumer<String> statusCallback) {
         this.poolIdentity = poolIdentity;
         this.pool = pool;
         this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
+        this.wallet = wallet;
+        this.storage = storage;
 
         // Parse peers count
         String peersStr = pool.getPeers();
@@ -82,14 +85,6 @@ public class CoinjoinHandler {
 
         // Fee rate (default 1 sat/vbyte if not set)
         this.feeRate = 1;
-
-        // Get wallet reference
-        Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
-        if (!openWallets.isEmpty()) {
-            Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-            this.wallet = firstWallet.getKey();
-            this.storage = firstWallet.getValue();
-        }
     }
 
     /**
