@@ -33,12 +33,6 @@ import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-/**
- * Unified handler for coinjoin phases - works for both pool creators and
- * joiners.
- * Manages: output collection, input registration, PSBT combining, and
- * broadcasting.
- */
 public class CoinjoinHandler {
     private static final Logger logger = Logger.getLogger(CoinjoinHandler.class.getName());
 
@@ -71,19 +65,11 @@ public class CoinjoinHandler {
         this.wallet = wallet;
         this.storage = storage;
 
-        // Parse peers count
-        String peersStr = pool.getPeers();
-        if (peersStr.contains("/")) {
-            this.numPeers = (int) Double.parseDouble(peersStr.split("/")[1].trim());
-        } else {
-            this.numPeers = (int) Double.parseDouble(peersStr.trim());
-        }
+        this.numPeers = pool.getParsedPeers();
 
-        // Parse denomination (BTC to sats) - strip " BTC" suffix if present
         String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
         this.poolAmountSats = (long) (Double.parseDouble(denomStr) * 100_000_000);
 
-        // Fee rate (default 1 sat/vbyte if not set)
         this.feeRate = 1;
     }
 
@@ -96,10 +82,8 @@ public class CoinjoinHandler {
 
         updateStatus("Registering output");
 
-        // Send output to pool
         sendOutputToPool(myOutputAddress);
 
-        // Start listening for outputs and inputs from peers
         startListeningForMessages();
     }
 
@@ -163,9 +147,8 @@ public class CoinjoinHandler {
                 updateStatus("Outputs: " + outputAddresses.size() + "/" + numPeers);
 
                 if (outputAddresses.size() == numPeers) {
-                    logger.info("All outputs collected, ready for input registration");
+                    logger.info("All outputs registered, ready for input registration");
                     updateStatus("Select UTXO for input");
-                    // Trigger callback to show UTXO selection dialog
                     if (onReadyForInputCallback != null) {
                         Platform.runLater(onReadyForInputCallback);
                     }
@@ -195,11 +178,9 @@ public class CoinjoinHandler {
                         return null;
                     }
 
-                    // Sign the PSBT
                     updateStatus("Signing PSBT");
                     signPSBT(psbt, selectedUtxo, utxoNode);
 
-                    // Verify signing worked
                     PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
                     logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
                             ", isFinalized: " + psbtInput.isFinalized() +
@@ -212,7 +193,6 @@ public class CoinjoinHandler {
                         return null;
                     }
 
-                    // Serialize and send
                     byte[] psbtBytes = psbt.serialize();
                     myPsbtBase64 = Base64.toBase64String(psbtBytes);
                     inputPSBTs.add(myPsbtBase64);
@@ -238,11 +218,8 @@ public class CoinjoinHandler {
             Transaction tx = new Transaction();
             tx.setVersion(2);
 
-            // Add the input
             tx.addInput(utxo.getHash(), (int) utxo.getIndex(), new Script(new byte[0]));
 
-            // Calculate output amount (pool amount minus fee share)
-            // Estimate ~150 vbytes per input, split fee among all participants
             long estimatedTxSize = 150L * numPeers;
             long totalFee = feeRate * estimatedTxSize;
             long feePerOutput = totalFee / numPeers;
@@ -251,35 +228,25 @@ public class CoinjoinHandler {
             logger.info("Creating PSBT: pool=" + poolAmountSats + " sats, fee/output=" + feePerOutput + ", output="
                     + outputAmount);
 
-            // CRITICAL: Sort output addresses to ensure all participants have the same
-            // ordering.
-            // Without this, each participant receives outputs in different Nostr arrival
-            // order,
-            // causing different signature hashes and verification failures.
             List<String> sortedOutputs = new ArrayList<>(outputAddresses);
             Collections.sort(sortedOutputs);
             logger.info("Sorted " + sortedOutputs.size() + " output addresses for deterministic ordering");
 
-            // Add outputs for all participants in sorted order
             for (String addr : sortedOutputs) {
                 Address address = Address.fromString(addr);
                 tx.addOutput(outputAmount, address.getOutputScript());
             }
 
-            // Create PSBT
             PSBT psbt = new PSBT(tx);
 
-            // Set sighash to ANYONECANPAY_ALL (0x81)
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
             psbtInput.setSigHash(SigHash.ANYONECANPAY_ALL);
 
-            // Add witness UTXO for signing (required for segwit)
-            // NO derivation paths for privacy in coinjoin!
             if (wallet != null) {
                 Transaction utxoTx = wallet.getTransactions().get(utxo.getHash()).getTransaction();
                 TransactionOutput witnessUtxo = utxoTx.getOutputs().get((int) utxo.getIndex());
                 psbtInput.setWitnessUtxo(witnessUtxo);
-                logger.info("PSBT created with witness UTXO, no derivation paths (privacy)");
+                logger.info("PSBT created with witness UTXO");
             }
 
             return psbt;
@@ -300,12 +267,11 @@ public class CoinjoinHandler {
             }
 
             if (utxoNode == null) {
-                logger.severe("No UTXO node available for signing - cannot determine which key to use");
-                updateStatus("Error: No UTXO node for signing");
+                logger.severe("No private key available for signing");
+                updateStatus("Error: No private key for signing");
                 return;
             }
 
-            // Check if wallet has private keys (software wallet)
             com.sparrowwallet.drongo.wallet.Keystore keystore = wallet.getKeystores().get(0);
             if (!keystore.hasPrivateKey()) {
                 logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
@@ -313,30 +279,26 @@ public class CoinjoinHandler {
                 return;
             }
 
-            logger.info("Signing PSBT with key for node: " + utxoNode.getDerivationPath());
+            logger.info("Signing PSBT with : " + utxoNode.getDerivationPath());
 
-            // For encrypted wallets, we need to get the decrypted version
             if (wallet.isEncrypted()) {
                 logger.warning("Wallet is encrypted - signing may require password dialog");
-                // In production, would need to show WalletPasswordDialog
+                // TODO: show WalletPasswordDialog
             }
 
-            // Get the private key for this UTXO's node
             com.sparrowwallet.drongo.crypto.ECKey privateKey = keystore.getKey(utxoNode);
 
             if (privateKey == null || !privateKey.hasPrivKey()) {
-                logger.severe("Could not get private key for node: " + utxoNode.getDerivationPath());
+                logger.severe("Could not get private key for: " + utxoNode.getDerivationPath());
                 updateStatus("Error: Could not get private key");
                 return;
             }
 
             logger.info("Got private key, signing PSBT input...");
 
-            // Sign the PSBT input directly with the private key
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
             psbtInput.sign(privateKey);
 
-            // Verify the PSBT is signed
             logger.info("After signing - isSigned: " + psbtInput.isSigned() +
                     ", isFinalized: " + psbtInput.isFinalized() +
                     ", partialSigs: "
@@ -345,20 +307,15 @@ public class CoinjoinHandler {
 
             if (psbtInput.isSigned()) {
                 logger.info("PSBT signed successfully, now creating witness...");
-                // For P2WPKH, we need to create the finalScriptWitness manually
-                // The witness structure is: [signature, pubkey]
                 if (!psbtInput.getPartialSignatures().isEmpty()) {
                     try {
-                        // Get the first (and only for single-sig) partial signature
                         var sigEntry = psbtInput.getPartialSignatures().entrySet().iterator().next();
                         com.sparrowwallet.drongo.crypto.ECKey pubKey = sigEntry.getKey();
                         com.sparrowwallet.drongo.protocol.TransactionSignature sig = sigEntry.getValue();
 
-                        // Create the witness using the constructor that creates [signature, pubkey]
                         com.sparrowwallet.drongo.protocol.TransactionWitness witness = new com.sparrowwallet.drongo.protocol.TransactionWitness(
                                 psbt.getTransaction(), pubKey, sig);
 
-                        // Set as final witness
                         psbtInput.setFinalScriptWitness(witness);
 
                         logger.info("Created finalScriptWitness - isFinalized: " + psbtInput.isFinalized() +
@@ -419,7 +376,7 @@ public class CoinjoinHandler {
                 updateStatus("Inputs: " + inputPSBTs.size() + "/" + numPeers);
 
                 if (inputPSBTs.size() == numPeers) {
-                    logger.info("All inputs collected, finalizing coinjoin");
+                    logger.info("All inputs registered, finalizing coinjoin");
 
                     // Run finalization in background
                     Task<Void> finalizeTask = new Task<>() {
@@ -438,17 +395,13 @@ public class CoinjoinHandler {
     }
 
     private void finalizeCoinjoin() {
-        logger.info("=== COINJOIN FINALIZE v2 START ===");
-        logger.info("Number of PSBTs to merge: " + inputPSBTs.size());
+        logger.info("PSBTs: " + inputPSBTs.size());
         updateStatus("Finalizing coinjoin");
 
         try {
-            // For coinjoin, each PSBT has a different input but same outputs
-            // We need to build a new transaction with ALL inputs from ALL PSBTs
 
             logger.info("Merging " + inputPSBTs.size() + " PSBTs for coinjoin");
 
-            // Parse all PSBTs first
             List<PSBT> psbts = new ArrayList<>();
             for (String psbtBase64 : inputPSBTs) {
                 PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
@@ -457,11 +410,9 @@ public class CoinjoinHandler {
                         psbt.getTransaction().getOutputs().size() + " outputs");
             }
 
-            // Create the combined transaction
             Transaction combinedTx = new Transaction();
             combinedTx.setVersion(2);
 
-            // Add all inputs from all PSBTs (each PSBT has one input from each participant)
             for (PSBT psbt : psbts) {
                 Transaction tx = psbt.getTransaction();
                 for (TransactionInput input : tx.getInputs()) {
@@ -470,7 +421,6 @@ public class CoinjoinHandler {
                 }
             }
 
-            // Use outputs from the first PSBT (they should all have the same outputs)
             Transaction firstTx = psbts.get(0).getTransaction();
             for (TransactionOutput output : firstTx.getOutputs()) {
                 combinedTx.addOutput(output.getValue(), output.getScript());
@@ -479,17 +429,13 @@ public class CoinjoinHandler {
             logger.info("Combined transaction: " + combinedTx.getInputs().size() + " inputs, " +
                     combinedTx.getOutputs().size() + " outputs");
 
-            // Create a new PSBT for the combined transaction
             PSBT combinedPsbt = new PSBT(combinedTx);
 
-            // Copy witness UTXOs and signatures from each original PSBT to the combined
-            // PSBT
             int inputIndex = 0;
             for (PSBT psbt : psbts) {
                 PSBTInput originalInput = psbt.getPsbtInputs().get(0);
                 PSBTInput combinedInput = combinedPsbt.getPsbtInputs().get(inputIndex);
 
-                // Log the state of the original input
                 logger.info("Input " + inputIndex + " state: isSigned=" + originalInput.isSigned() +
                         ", isFinalized=" + originalInput.isFinalized() +
                         ", hasWitnessUtxo=" + (originalInput.getWitnessUtxo() != null) +
@@ -499,24 +445,20 @@ public class CoinjoinHandler {
                         + (originalInput.getPartialSignatures() != null ? originalInput.getPartialSignatures().size()
                                 : 0));
 
-                // Copy witness UTXO
                 if (originalInput.getWitnessUtxo() != null) {
                     combinedInput.setWitnessUtxo(originalInput.getWitnessUtxo());
                 }
 
-                // Copy final script witness if present
                 if (originalInput.getFinalScriptWitness() != null) {
                     combinedInput.setFinalScriptWitness(originalInput.getFinalScriptWitness());
                     logger.info("Copied final script witness for input " + inputIndex);
                 }
 
-                // Copy final script sig if present
                 if (originalInput.getFinalScriptSig() != null) {
                     combinedInput.setFinalScriptSig(originalInput.getFinalScriptSig());
                     logger.info("Copied final script sig for input " + inputIndex);
                 }
 
-                // Copy partial signatures
                 if (originalInput.getPartialSignatures() != null && !originalInput.getPartialSignatures().isEmpty()) {
                     for (var entry : originalInput.getPartialSignatures().entrySet()) {
                         combinedInput.getPartialSignatures().put(entry.getKey(), entry.getValue());
@@ -525,7 +467,6 @@ public class CoinjoinHandler {
                             " partial signatures for input " + inputIndex);
                 }
 
-                // Copy sighash type
                 if (originalInput.getSigHash() != null) {
                     combinedInput.setSigHash(originalInput.getSigHash());
                 }
@@ -533,7 +474,6 @@ public class CoinjoinHandler {
                 inputIndex++;
             }
 
-            // Log combined PSBT state and finalize each input
             for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
                 PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
                 logger.info("Combined input " + i + " before finalize: isSigned=" + input.isSigned() +
@@ -543,24 +483,20 @@ public class CoinjoinHandler {
                         + (input.getPartialSignatures() != null ? input.getPartialSignatures().size() : 0));
             }
 
-            // Finalize each input by creating witness from partial signatures if needed
             for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
                 PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
 
-                // If already finalized (has witness), skip
                 if (input.getFinalScriptWitness() != null) {
                     logger.info("Input " + i + " already has finalScriptWitness");
                     continue;
                 }
 
-                // If has partial signatures, create witness
                 if (input.getPartialSignatures() != null && !input.getPartialSignatures().isEmpty()) {
                     try {
                         var sigEntry = input.getPartialSignatures().entrySet().iterator().next();
                         com.sparrowwallet.drongo.crypto.ECKey pubKey = sigEntry.getKey();
                         com.sparrowwallet.drongo.protocol.TransactionSignature sig = sigEntry.getValue();
 
-                        // Use the correct constructor that creates [signature, pubkey]
                         com.sparrowwallet.drongo.protocol.TransactionWitness witness = new com.sparrowwallet.drongo.protocol.TransactionWitness(
                                 combinedPsbt.getTransaction(), pubKey, sig);
 
@@ -574,14 +510,12 @@ public class CoinjoinHandler {
                 }
             }
 
-            // Log state after finalization
             for (int i = 0; i < combinedPsbt.getPsbtInputs().size(); i++) {
                 PSBTInput input = combinedPsbt.getPsbtInputs().get(i);
                 logger.info("Combined input " + i + " after finalize: isFinalized=" + input.isFinalized() +
                         ", hasFinalWitness=" + (input.getFinalScriptWitness() != null));
             }
 
-            // Calculate the fee
             long totalInputValue = 0;
             for (PSBTInput input : combinedPsbt.getPsbtInputs()) {
                 if (input.getWitnessUtxo() != null) {
@@ -589,7 +523,6 @@ public class CoinjoinHandler {
                 }
             }
 
-            // Validate our output is present
             Transaction finalTx = combinedPsbt.extractTransaction();
 
             long totalOutputValue = 0;
@@ -604,7 +537,6 @@ public class CoinjoinHandler {
                         logger.info("Found our output: " + myOutputAddress + " with value " + output.getValue());
                     }
                 } catch (Exception e) {
-                    // Non-standard script, skip
                 }
             }
 
@@ -614,11 +546,9 @@ public class CoinjoinHandler {
                 return;
             }
 
-            // Calculate fee
             long fee = totalInputValue - totalOutputValue;
             logger.info("Final transaction: txid=" + finalTx.getTxId() + ", fee=" + fee + " sats");
 
-            // Broadcast the transaction with fee
             updateStatus("Broadcasting transaction");
             broadcastTransaction(finalTx, fee);
 
@@ -639,9 +569,8 @@ public class CoinjoinHandler {
 
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
-                updateStatus("Complete! TXID: " + tx.getTxId().toString().substring(0, 16) + "...");
+                updateStatus("Complete");
 
-                // Stop listening
                 stopListening();
             });
 
@@ -676,7 +605,6 @@ public class CoinjoinHandler {
         }
     }
 
-    // Getters for UI access
     public List<String> getOutputAddresses() {
         return new ArrayList<>(outputAddresses);
     }

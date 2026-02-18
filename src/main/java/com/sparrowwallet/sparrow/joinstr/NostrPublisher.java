@@ -30,15 +30,12 @@ public class NostrPublisher implements AutoCloseable {
 
     private String poolPrivateKey = "";
 
-    private NostrListener listener;
-
     public String getPoolPrivateKey() {
         return poolPrivateKey;
     }
 
     private static final Map<String, String> RELAYS = Map.of(
-            "nos", "wss://nos.lol"
-    );
+            "nos", "wss://nos.lol");
 
     public Address getNewReceiveAddress(Storage storage, Wallet wallet) {
         WalletForm walletForm = new WalletForm(storage, wallet);
@@ -84,8 +81,7 @@ public class NostrPublisher implements AutoCloseable {
                     denomination,
                     peers,
                     timeout,
-                    RELAYS.values().iterator().next()
-            );
+                    RELAYS.values().iterator().next());
 
             NIP01 nip01 = new NIP01(SENDER);
 
@@ -93,8 +89,7 @@ public class NostrPublisher implements AutoCloseable {
                     SENDER.getPublicKey(),
                     Kind.CONJOIN_POOL.getValue(),
                     tags,
-                    content
-            );
+                    content);
 
             nip01.setEvent(event);
             nip01.sign();
@@ -104,62 +99,17 @@ public class NostrPublisher implements AutoCloseable {
             logger.info("Event ID: " + event.getId());
             logger.info("Event: " + event);
 
-            String addressContent = String.format("{\"type\":\"output\",\"address\":\"%s\"}", bitcoinAddress);
-
-            NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
-            String encryptedContent = nip04.encrypt(poolIdentity, addressContent, poolIdentity.getPublicKey());
-
-            tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
-
-            GenericEvent encrypted_event = new GenericEvent(
-                    poolIdentity.getPublicKey(),
-                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
-                    tags,
-                    encryptedContent
-            );
-
-            nip04.setEvent(encrypted_event);
-            nip04.sign();
-            nip04.send(RELAYS);
-
-            logger.info("Event ID: " + encrypted_event.getId());
-            logger.info("Event: " + encrypted_event.toString());
-
-            Map<String, String> poolCredentials = new HashMap<>();
-            poolCredentials.put("id", poolId);
-            poolCredentials.put("public_key", poolIdentity.getPublicKey().toString());
-            poolCredentials.put("denomination", denomination);
-            poolCredentials.put("peers", peers);
-            poolCredentials.put("timeout", String.valueOf(timeout));
-            poolCredentials.put("relay", RELAYS.values().iterator().next());
-            poolCredentials.put("private_key", poolIdentity.getPrivateKey().toString());
-            poolCredentials.put("fee_rate", "1");
-
-            shareCredentials(poolIdentity, RELAYS.toString(), poolCredentials);
-
             return event;
 
         } catch (Exception e) {
             logger.severe("Error: " + e.getMessage());
             e.printStackTrace();
             return null;
-            }
         }
-
-        private void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials) {
-
-            listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
-            listener.startListening(decryptedMessage -> {
-                logger.info("Received message: " + decryptedMessage);
-            });
-
-        }
+    }
 
     @Override
     public void close() throws Exception {
-        if(listener != null) {
-            listener.close();
-            listener = null;
-        }
+        // No resources to close
     }
 }

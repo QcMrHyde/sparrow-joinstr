@@ -1,467 +1,234 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.google.common.reflect.TypeToken;
 import com.google.gson.Gson;
 import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
-import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import javafx.application.Platform;
-import nostr.api.NIP04;
-import nostr.event.BaseTag;
-import nostr.event.impl.GenericEvent;
-import nostr.event.Kind;
-import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
-import java.lang.reflect.Type;
-import java.time.Instant;
 import java.util.*;
-import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.TimeUnit;
-import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
-public class JoinPoolHandler implements AutoCloseable {
+public class JoinPoolHandler {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
-    private final Identity joinIdentity;
-    private final String poolRelay;
-    private final String poolPubkey;
-    private final String poolDenomination;
-    private final String poolPeers;
-    private final String poolTimeout;
-    private volatile String poolPrivateKey = "";
-    private transient NostrListener credentialsListener;
-    private transient NostrListener poolMessageListener;
-    private volatile Identity poolIdentity;
-    private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
-    private final int numPeers;
-    private final Consumer<String> statusCallback;
-    private final AtomicBoolean isCredentialsReceived = new AtomicBoolean(false);
 
-    private transient ScheduledExecutorService scheduledExecutorService = Executors.newScheduledThreadPool(2);
-    private transient ScheduledFuture<?> futureStopCredListener;
-    private transient ScheduledFuture<?> futureStopMsgListener;
+    private Identity joinIdentity;
+    private JoinstrPool pool;
+    private String relay;
+    private NostrListener credentialsListener;
+    private Identity poolIdentity;
+    private int numPeers;
+    private Consumer<String> statusCallback;
+    private CoinjoinHandler coinjoinHandler;
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
-        this.poolRelay = pool.getRelay();
-        this.poolPubkey = pool.getPubkey();
-        this.poolDenomination = pool.getDenomination();
-        this.poolPeers = pool.getPeers();
-        this.poolTimeout = pool.getTimeout();
+        this.pool = pool;
+        this.relay = pool.getRelay();
         this.statusCallback = statusCallback;
 
-        String peersStr = pool.getPeers();
-        try {
-            if (peersStr == null || peersStr.trim().isEmpty()) {
-                throw new IllegalArgumentException("Pool peers data is null or empty");
-            }
-            if (peersStr.contains("/")) {
-                String[] parts = peersStr.split("/");
-                if (parts.length < 2) {
-                    throw new IllegalArgumentException(
-                            "Invalid peers format: expected 'current/total', got: " + peersStr);
-                }
-                this.numPeers = Integer.parseInt(parts[1].trim());
-            } else {
-                this.numPeers = Integer.parseInt(peersStr.trim());
-            }
-        } catch (NumberFormatException e) {
-            logger.severe("Failed to parse peers count from pool data: " + peersStr);
-            throw new IllegalArgumentException("Invalid peers count format: " + peersStr, e);
-        } catch (IllegalArgumentException e) {
-            logger.severe("Invalid pool peers data: " + e.getMessage());
-            throw e;
-        }
-
-        if (pool.getPrivateKey() != null && !pool.getPrivateKey().isEmpty()) {
-            this.poolPrivateKey = pool.getPrivateKey();
-            this.poolIdentity = Identity.create(this.poolPrivateKey);
-        }
-
-    }
-
-    private ScheduledExecutorService getSchedulerService() {
-        synchronized (this) {
-            if (scheduledExecutorService.isShutdown() || scheduledExecutorService.isTerminated()) {
-                scheduledExecutorService = Executors.newScheduledThreadPool(2);
-            }
-            return scheduledExecutorService;
-        }
-    }
-
-    public int getConnectedPeers() {
-        return outputAddresses.size();
-    }
-
-    public String getPoolPrivateKey() {
-        return poolPrivateKey;
+        this.numPeers = pool.getParsedPeers();
     }
 
     /**
      * Start listening for credentials after sending join request
      */
     public void startListeningForCredentials() {
-        if (poolPrivateKey != null && !poolPrivateKey.isEmpty()) {
-            registerOutput();
-            return;
-        }
+        Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
 
-        try {
+        credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-            long msLeft = (Long.parseLong(poolTimeout) - Instant.now().getEpochSecond()) * 1000;
-            if (msLeft > 1000) {
-                Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
-
-                credentialsListener = new NostrListener(joinIdentity, poolRelay, null);
-
-                credentialsListener.startListening(decryptedMessage -> {
-                    try {
-
-                        Gson gson = new Gson();
-                        Type mapType = new TypeToken<Map<String, Object>>() {
-                        }.getType();
-                        Map<String, Object> decryptedMessageGSON = gson.fromJson(decryptedMessage, mapType);
-
-                        if (decryptedMessageGSON.get("id") != null && decryptedMessageGSON.get("private_key") != null
-                                && isCredentialsReceived.compareAndSet(false, true)) {
-                            handleCredentialsReceived(decryptedMessage);
-                        }
-
-                    } catch (Exception e) {
-                        logger.warning("Error: " + e.getMessage());
-                    }
-                });
-
-                // Schedule thread to stop listening after pool timeout
-                futureStopCredListener = getSchedulerService().schedule(() -> {
-                    logger.info("Pool expired, stopping listener");
-                    try {
-                        if (credentialsListener != null)
-                            credentialsListener.close();
-                    } catch (TimeoutException e) {
-                        logger.warning("Error: " + e.getMessage());
-                    }
-                }, msLeft, TimeUnit.MILLISECONDS);
-
+        credentialsListener.startListening(decryptedMessage -> {
+            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"")) {
+                handleCredentialsReceived(decryptedMessage);
             }
-
-        } catch (RuntimeException e) {
-            logger.warning("Error: " + e.getMessage());
-        }
+        });
     }
 
     /**
      * Handle received pool credentials
      */
+    private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
+
     private void handleCredentialsReceived(String credentialsJson) {
+        if (!credentialsReceived.compareAndSet(false, true)) {
+            logger.warning("Credentials already received, ignoring duplicate message");
+            return;
+        }
 
         try {
+            logger.info("Received credentials: " + credentialsJson);
 
             Gson gson = new Gson();
-            Type mapType = new TypeToken<Map<String, Object>>() {
-            }.getType();
-            Map<String, Object> credentials = gson.fromJson(credentialsJson, mapType);
+            Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
 
-            if (credentials.get("private_key") != null)
-                poolPrivateKey = credentials.get("private_key").toString();
+            String poolPrivateKey = credentials.get("private_key").toString();
+            this.poolPrivateKeyString = poolPrivateKey;
+            poolIdentity = Identity.create(poolPrivateKey);
 
-            if (!poolPrivateKey.isEmpty()) {
+            JoinstrPool poolWithCredentials = new JoinstrPool(
+                    credentials.get("relay").toString(),
+                    credentials.get("public_key").toString(),
+                    pool.getDenomination(),
+                    credentials.get("peers").toString(),
+                    credentials.get("timeout").toString(),
+                    poolPrivateKey);
 
-                poolIdentity = Identity.create(poolPrivateKey);
+            ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
+            pools.removeIf(p -> p.getPubkey().equals(poolWithCredentials.getPubkey()));
+            pools.add(poolWithCredentials);
+            Config.get().setPoolStore(pools);
+            JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
 
-                JoinstrPool poolWithCredentials = new JoinstrPool(
-                        poolRelay,
-                        poolPubkey,
-                        poolDenomination,
-                        poolPeers,
-                        poolTimeout,
-                        poolPrivateKey);
+            this.pool = poolWithCredentials;
 
-                ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-                pools.removeIf(p -> p.getPubkey().equals(poolWithCredentials.getPubkey()));
-                pools.add(poolWithCredentials);
-                Config.get().setPoolStore(pools);
-                JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
-
-                try {
-                    if (credentialsListener != null) {
-                        credentialsListener.close();
-                        if (futureStopCredListener != null && !futureStopCredListener.isCancelled()
-                                && !futureStopCredListener.isDone())
-                            futureStopCredListener.cancel(true);
-                    }
-                } catch (Exception e) {
-                    logger.warning("Error: " + e.getMessage());
+            try {
+                if (credentialsListener != null) {
+                    credentialsListener.close();
                 }
-
-                Platform.runLater(() -> {
-                    if (statusCallback != null) {
-                        statusCallback.accept("Credentials received");
-                    }
-                });
-
-                registerOutput();
+            } catch (Exception e) {
+                logger.warning("Error stopping credentials listener: " + e.getMessage());
             }
+
+            Platform.runLater(() -> statusCallback.accept("Credentials received"));
+
+            // Use CoinjoinHandler for the rest of the flow
+            startCoinjoinFlow();
+
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.severe("Error processing credentials: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> {
-                if (statusCallback != null) {
-                    statusCallback.accept("Error: " + e.getMessage());
-                }
-            });
+            Platform.runLater(() -> statusCallback.accept("Error " + e.getMessage()));
         }
     }
 
     /**
-     * Register output address using pool credentials
+     * Start the coinjoin flow using CoinjoinHandler
      */
-    private void registerOutput() {
+    private void startCoinjoinFlow() {
         try {
             Map<com.sparrowwallet.drongo.wallet.Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
-
             if (openWallets.isEmpty()) {
                 throw new IllegalStateException("No wallet found");
             }
-
-            // AtomicReference to hold the selected wallet from the FX thread
-            final AtomicReference<Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage>> selectedWalletRef = new AtomicReference<>();
-            final AtomicReference<Exception> exceptionRef = new AtomicReference<>();
-
-            if (openWallets.keySet().stream().filter(Wallet::isValid).count() > 1) {
-                // Multiple wallets - need to show dialog on JavaFX thread
-                final CountDownLatch latch = new CountDownLatch(1);
-                Runnable walletSelectionAction = () -> {
-                    try {
-                        WalletSelectionDialog walletSelectionDialog = new WalletSelectionDialog(openWallets);
-                        walletSelectionDialog.showAndWait();
-                        selectedWalletRef.set(walletSelectionDialog.getSelectedWallet());
-                    } catch (Exception e) {
-                        exceptionRef.set(e);
-                    } finally {
-                        latch.countDown();
-                    }
-                };
-
-                // Wait for the dialog to complete
-                try {
-                    if (!Platform.isFxApplicationThread()) {
-                        Platform.runLater(walletSelectionAction);
-                        latch.await();
-                    } else {
-                        walletSelectionAction.run();
-                    }
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    throw new IllegalStateException("Interrupted while waiting for wallet selection");
-                }
-
-                // Check if there was an exception in the FX thread
-                if (exceptionRef.get() != null) {
-                    throw exceptionRef.get();
-                }
-
-                if (selectedWalletRef.get() == null) {
-                    throw new IllegalStateException("No wallet selected");
-                }
-            } else {
-                // Single wallet - no dialog needed
-                selectedWalletRef.set(openWallets.entrySet().iterator().next());
-            }
-
-            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet = selectedWalletRef.get();
-            com.sparrowwallet.drongo.wallet.Wallet wallet = selectedWallet.getKey();
-            Storage storage = selectedWallet.getValue();
+            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> firstWallet = openWallets.entrySet().iterator()
+                    .next();
+            com.sparrowwallet.drongo.wallet.Wallet wallet = firstWallet.getKey();
+            Storage storage = firstWallet.getValue();
 
             WalletForm walletForm = new WalletForm(storage, wallet);
             NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);
             Address myOutputAddress = freshEntry.getAddress();
 
-            Gson gson = new Gson();
-            Map<String, String> outputMap = new LinkedHashMap<>();
-            outputMap.put("type", "output");
-            outputMap.put("address", myOutputAddress.toString());
-            String outputContent = gson.toJson(outputMap);
+            coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, statusCallback);
 
-            List<BaseTag> tags = new ArrayList<>();
-            tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
-
-            NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
-            String encryptedContent = nip04.encrypt(poolIdentity, outputContent, poolIdentity.getPublicKey());
-
-            GenericEvent outputEvent = new GenericEvent(
-                    poolIdentity.getPublicKey(),
-                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
-                    tags,
-                    encryptedContent);
-
-            nip04.setEvent(outputEvent);
-            nip04.sign();
-            nip04.send(Map.of("default", poolRelay));
-
-            logger.info("Output registered: " + myOutputAddress);
-            outputAddresses.add(myOutputAddress.toString());
-
-            Platform.runLater(() -> {
-                if (statusCallback != null) {
-                    statusCallback.accept("Output registered");
-                }
+            final com.sparrowwallet.drongo.wallet.Wallet walletRef = wallet;
+            coinjoinHandler.setOnReadyForInputCallback(() -> {
+                showUtxoSelectionDialog(walletRef);
             });
 
-            listenForOutputs();
+            coinjoinHandler.startOutputPhase(myOutputAddress.toString());
+            logger.info("Started coinjoin flow with output address: " + myOutputAddress);
 
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.severe("Error starting coinjoin flow: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> {
-                if (statusCallback != null) {
-                    statusCallback.accept("Error: " + e.getMessage());
-                }
-            });
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
     /**
-     * Listen for outputs from other peers using pool identity
+     * Trigger input registration with selected UTXO.
      */
-    private void listenForOutputs() {
-        try {
-            long msLeft = (Long.parseLong(poolTimeout) - Instant.now().getEpochSecond()) * 1000;
-            if (msLeft > 1000) {
-                poolMessageListener = new NostrListener(poolIdentity, poolRelay, getPoolCredentialsMap());
-                poolMessageListener.startListening(decryptedMessage -> {
-                    try {
-                        Gson gson = new Gson();
-                        Type mapType = new TypeToken<Map<String, Object>>() {
-                        }.getType();
-                        Map<String, Object> decryptedMessageGSON = gson.fromJson(decryptedMessage, mapType);
-
-                        if (decryptedMessageGSON.get("type") != null
-                                && "output".equals(decryptedMessageGSON.get("type"))) {
-                            handleOutputReceived(decryptedMessage);
-                        }
-                    } catch (Exception e) {
-                        logger.warning("Error: " + e.getMessage());
-                    }
-                });
-
-                // Schedule thread to stop listening after pool timeout
-                futureStopMsgListener = getSchedulerService().schedule(() -> {
-                    try {
-                        logger.info("Pool expired, stopping listener");
-                        if (poolMessageListener != null) {
-                            poolMessageListener.close();
-                        }
-                    } catch (TimeoutException e) {
-                        logger.warning("Error: " + e.getMessage());
-                    }
-                }, msLeft, TimeUnit.MILLISECONDS);
-            }
-
-        } catch (Exception e) {
-            logger.warning("Error: " + e.getMessage());
+    public void registerInput(com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex utxo,
+            com.sparrowwallet.drongo.wallet.WalletNode utxoNode) {
+        if (coinjoinHandler != null) {
+            coinjoinHandler.startInputPhase(utxo, utxoNode);
+        } else {
+            logger.severe("CoinjoinHandler not initialized");
+            Platform.runLater(() -> statusCallback.accept("Error: Handler not ready"));
         }
     }
 
-    private void handleOutputReceived(String decryptedMessage) {
+    public boolean isReadyForInputPhase() {
+        return coinjoinHandler != null && coinjoinHandler.isReadyForInputPhase();
+    }
+
+    public CoinjoinHandler getCoinjoinHandler() {
+        return coinjoinHandler;
+    }
+
+    /**
+     * Show UTXO selection dialog and register input with selected UTXO
+     */
+    private void showUtxoSelectionDialog(com.sparrowwallet.drongo.wallet.Wallet wallet) {
         try {
-            Gson gson = new Gson();
-            Map<String, String> outputData = gson.fromJson(decryptedMessage, Map.class);
-            String address = outputData.get("address");
+            long poolAmountSats = coinjoinHandler.getPoolAmountSats();
 
-            if (address != null && !outputAddresses.contains(address)) {
-                outputAddresses.add(address);
-                Platform.runLater(() -> {
-                    if (statusCallback != null) {
-                        statusCallback.accept("Waiting for peers");
-                    }
-                });
+            com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog dialog = new com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog(
+                    wallet);
+            dialog.setTitle("Select UTXO for Coinjoin");
+            dialog.showAndWait();
 
-                int currentSize = outputAddresses.size();
-                if (currentSize == numPeers) {
-                    Platform.runLater(() -> {
-                        if (statusCallback != null) {
-                            statusCallback.accept("Input registration");
-                        }
-                    });
-                    stop();
-                }
+            java.util.Set<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex> selectedUtxos = dialog
+                    .getSelectedUtxos();
+
+            if (selectedUtxos != null && !selectedUtxos.isEmpty()) {
+                com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex selectedUtxo = selectedUtxos.iterator()
+                        .next();
+
+                java.util.Map<com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex, com.sparrowwallet.drongo.wallet.WalletNode> utxoMap = wallet
+                        .getWalletUtxos();
+                com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
+
+                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
+                        + selectedUtxo.getValue());
+
+                coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
+            } else {
+                logger.warning("No UTXO selected, input registration cancelled");
+                Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
             }
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.severe("Error showing UTXO dialog: " + e.getMessage());
+            e.printStackTrace();
+            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
     public void stop() {
-
         try {
-            synchronized (this) {
-                if (credentialsListener != null) {
-                    credentialsListener.close();
-                    credentialsListener = null;
-                    if (futureStopCredListener != null && !futureStopCredListener.isCancelled()
-                            && !futureStopCredListener.isDone())
-                        futureStopCredListener.cancel(true);
-                }
+            if (credentialsListener != null) {
+                credentialsListener.close();
+            }
+            if (coinjoinHandler != null) {
+                coinjoinHandler.stopListening();
             }
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.warning("Error stopping listeners: " + e.getMessage());
         }
-
-        try {
-            synchronized (this) {
-                if (poolMessageListener != null) {
-                    poolMessageListener.close();
-                    poolMessageListener = null;
-                    if (futureStopMsgListener != null && !futureStopMsgListener.isCancelled()
-                            && !futureStopMsgListener.isDone())
-                        futureStopMsgListener.cancel(true);
-                }
-            }
-        } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
-        }
-
-        try {
-            synchronized (this) {
-                scheduledExecutorService.shutdown();
-            }
-        } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
-        }
-
     }
 
-    @Override
-    public void close() throws Exception {
-        stop();
+    public int getConnectedPeers() {
+        if (coinjoinHandler != null) {
+            return coinjoinHandler.getOutputAddresses().size();
+        }
+        return 0;
     }
 
-    private Map<String, String> getPoolCredentialsMap() {
-        Map<String, String> map = new HashMap<>();
-        // Use poolPubkey as ID since we don't store the event ID and it is unique
-        // enough for verify
-        map.put("id", poolPubkey);
-        map.put("public_key", poolPubkey);
-        map.put("denomination", poolDenomination);
-        map.put("peers", poolPeers);
-        map.put("timeout", poolTimeout);
-        map.put("relay", poolRelay);
-        map.put("private_key", poolPrivateKey);
-        return map;
+    public String getPoolPrivateKey() {
+        if (poolIdentity != null) {
+            return poolPrivateKeyString;
+        }
+        return "";
     }
+
+    private String poolPrivateKeyString = "";
 }
