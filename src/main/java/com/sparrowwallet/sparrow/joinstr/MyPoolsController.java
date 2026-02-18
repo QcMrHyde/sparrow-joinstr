@@ -9,6 +9,8 @@ import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 import java.io.IOException;
 import java.time.Instant;
 import java.util.ArrayList;
+import java.util.Iterator;
+import java.util.logging.Logger;
 
 import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
@@ -19,19 +21,21 @@ import javafx.scene.layout.VBox;
 
 public class MyPoolsController extends JoinstrFormController {
 
+    private static final Logger logger = Logger.getLogger(MyPoolsController.class.getName());
+
     @FXML
     private VBox contentVBox;
 
     @FXML
     private TextField searchTextField;
 
-    private JoinstrPoolList joinstrPoolList;
+    private final JoinstrPoolList joinstrPoolList = new JoinstrPoolList();
     private JoinstrInfoPane joinstrInfoPane;
+    private final ToggleButton exportButton = new ToggleButton("Export pools");
 
     @Override
     public void initializeView() {
         try {
-            joinstrPoolList = new JoinstrPoolList();
 
             // Add pool store data
             addPoolStoreData();
@@ -64,7 +68,6 @@ public class MyPoolsController extends JoinstrFormController {
                 addPoolStoreData();
             });
 
-            ToggleButton exportButton = new ToggleButton("Export pools");
             exportButton.setOnAction(event -> {
 
                 try {
@@ -87,31 +90,38 @@ public class MyPoolsController extends JoinstrFormController {
             });
 
         } catch (Exception e) {
-            if(e != null) {
-                e.printStackTrace();
-            }
+            showError(e.getMessage());
         }
 
     }
 
+    @Override
+    public void refreshView() {
+        addPoolStoreData();
+    }
+
     private void addPoolStoreData() {
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-        Boolean pollStoreChanged = false;
+        boolean poolStoreChanged = false;
 
-        joinstrPoolList.clearPools();
-        for (JoinstrPool pool: pools) {
+        clearPoolList();
+        Iterator<JoinstrPool> iterator = pools.iterator();
+        while (iterator.hasNext()) {
+            JoinstrPool pool = iterator.next();
             long timeout = Long.parseLong(pool.getTimeout());
             if (timeout >= Instant.now().getEpochSecond()) {
                 joinstrPoolList.addPool(pool);
             } else {
-                pools.remove(pool);
-                pollStoreChanged = true;
+                pool.stopListeningForCredentials();
+                iterator.remove();
+                poolStoreChanged = true;
             }
         }
 
-        if(pollStoreChanged)
+        if(poolStoreChanged)
             Config.get().setPoolStore(pools);
 
+        exportButton.setDisable(joinstrPoolList.isEmpty());
     }
 
     private void filterPools(String searchText) {
@@ -120,8 +130,17 @@ public class MyPoolsController extends JoinstrFormController {
 
     public void handleSearchButton(ActionEvent e) {
         if(e.getSource()==searchTextField) {
-            System.out.println(searchTextField.getText());
-        };
+            logger.info(searchTextField.getText());
+        }
     }
 
+    public void clearPoolList() {
+        joinstrPoolList.clearPools();
+    }
+
+    @Override
+    public void close() throws Exception {
+        joinstrPoolList.clearPools();
+        joinstrInfoPane = null;
+    }
 }

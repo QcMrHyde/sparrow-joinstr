@@ -241,6 +241,8 @@ public class AppController implements Initializable {
 
     private final Map<File, File> renamedWallets = new HashMap<>();
 
+    private JoinstrController joinstrController;
+
     private final ChangeListener<Boolean> serverToggleOnlineListener = (observable, oldValue, newValue) -> {
         Platform.runLater(() -> setServerToggleTooltip(getCurrentBlockHeight()));
     };
@@ -554,34 +556,45 @@ public class AppController implements Initializable {
 
     private Stage getJoinstrStage() {
         try {
-            FXMLLoader loader = new FXMLLoader(AppController.class.getResource("joinstr/joinstr.fxml"));
-            BorderPane root = loader.load();
+            Stage stage;
 
-            if(OsType.getCurrent() == OsType.WINDOWS) {
-                root.setBorder(new Border(new BorderStroke(Color.DARKGRAY, BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT)));
+            if(joinstrController == null) {
+
+                FXMLLoader loader = new FXMLLoader(AppController.class.getResource("joinstr/joinstr.fxml"));
+                BorderPane root = loader.load();
+
+                if(OsType.getCurrent() == OsType.WINDOWS) {
+                    root.setBorder(new Border(new BorderStroke(Color.DARKGRAY, BorderStrokeStyle.SOLID, CornerRadii.EMPTY, BorderWidths.DEFAULT)));
+                }
+
+                stage = new Stage(StageStyle.DECORATED);
+                stage.setTitle("Coinjoin");
+                stage.initOwner(tabs.getScene().getWindow());
+
+                joinstrController = loader.getController();
+                JoinstrForm joinstrForm = new JoinstrForm(getSelectedWalletForm());
+                joinstrController.setJoinstrForm(joinstrForm);
+
+                Scene scene = new Scene(root);
+                AppServices.onEscapePressed(scene, stage::close);
+                stage.setScene(scene);
+                joinstrController.setStage(stage);
+                joinstrController.initializeView();
+                setStageIcon(stage);
+                stage.setOnShowing(event -> {
+                    AppServices.moveToActiveWindowScreen(stage, 600, 460);
+                });
+                stage.setOnCloseRequest(event -> {
+                    joinstrController.close();
+                    joinstrController = null;
+                });
+            } else {
+                stage = joinstrController.getStage();
             }
-
-            Stage stage = new Stage(StageStyle.DECORATED);
-            stage.setTitle("Coinjoin");
-            stage.initOwner(tabs.getScene().getWindow());
-
-            JoinstrController controller = loader.getController();
-            JoinstrForm joinstrForm = new JoinstrForm(getSelectedWalletForm());
-            controller.setJoinstrForm(joinstrForm);
-
-            Scene scene = new Scene(root);
-            AppServices.onEscapePressed(scene, stage::close);
-            stage.setScene(scene);
-            controller.setStage(stage);
-            controller.initializeView();
-            setStageIcon(stage);
-            stage.setOnShowing(event -> {
-                AppServices.moveToActiveWindowScreen(stage, 600, 460);
-            });
 
             return stage;
         } catch(IOException e) {
-            log.error("Error loading about stage", e);
+            log.error("Error loading Joinstr stage", e);
         }
 
         return null;
