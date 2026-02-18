@@ -87,6 +87,11 @@ public class JoinPoolHandler implements AutoCloseable {
             throw e;
         }
 
+        if (pool.getPrivateKey() != null && !pool.getPrivateKey().isEmpty()) {
+            this.poolPrivateKey = pool.getPrivateKey();
+            this.poolIdentity = Identity.create(this.poolPrivateKey);
+        }
+
     }
 
     private ScheduledExecutorService getSchedulerService() {
@@ -110,6 +115,10 @@ public class JoinPoolHandler implements AutoCloseable {
      * Start listening for credentials after sending join request
      */
     public void startListeningForCredentials() {
+        if (poolPrivateKey != null && !poolPrivateKey.isEmpty()) {
+            registerOutput();
+            return;
+        }
 
         try {
 
@@ -333,7 +342,7 @@ public class JoinPoolHandler implements AutoCloseable {
         try {
             long msLeft = (Long.parseLong(poolTimeout) - Instant.now().getEpochSecond()) * 1000;
             if (msLeft > 1000) {
-                poolMessageListener = new NostrListener(poolIdentity, poolRelay, null);
+                poolMessageListener = new NostrListener(poolIdentity, poolRelay, getPoolCredentialsMap());
                 poolMessageListener.startListening(decryptedMessage -> {
                     try {
                         Gson gson = new Gson();
@@ -442,4 +451,17 @@ public class JoinPoolHandler implements AutoCloseable {
         stop();
     }
 
+    private Map<String, String> getPoolCredentialsMap() {
+        Map<String, String> map = new HashMap<>();
+        // Use poolPubkey as ID since we don't store the event ID and it is unique
+        // enough for verify
+        map.put("id", poolPubkey);
+        map.put("public_key", poolPubkey);
+        map.put("denomination", poolDenomination);
+        map.put("peers", poolPeers);
+        map.put("timeout", poolTimeout);
+        map.put("relay", poolRelay);
+        map.put("private_key", poolPrivateKey);
+        return map;
+    }
 }

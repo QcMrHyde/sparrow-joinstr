@@ -29,7 +29,7 @@ public class JoinstrPool {
     private JoinPoolHandler handler;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
-                       String peers, String timeout) {
+            String peers, String timeout) {
         this.relay = new SimpleStringProperty(relay);
         this.pubkey = new SimpleStringProperty(pubkey);
         this.denomination = new SimpleStringProperty(denomination);
@@ -40,7 +40,7 @@ public class JoinstrPool {
     }
 
     public JoinstrPool(String relay, String pubkey, String denomination,
-                       String peers, String timeout, String privateKey) {
+            String peers, String timeout, String privateKey) {
         this.relay = new SimpleStringProperty(relay);
         this.pubkey = new SimpleStringProperty(pubkey);
         this.denomination = new SimpleStringProperty(denomination);
@@ -52,7 +52,7 @@ public class JoinstrPool {
     }
 
     public JoinstrPool(String relay, String pubkey, String denomination,
-                       String peers, String timeout, String privateKey, String status) {
+            String peers, String timeout, String privateKey, String status) {
         this.relay = new SimpleStringProperty(relay);
         this.pubkey = new SimpleStringProperty(pubkey);
         this.denomination = new SimpleStringProperty(denomination);
@@ -63,26 +63,44 @@ public class JoinstrPool {
 
     }
 
-    public String getRelay() { return relay.get(); }
-    public String getPubkey() { return pubkey.get(); }
-    private String getPrivateKey() { return privateKey; }
-    public String getDenomination() { return denomination.get(); }
-    public String getPeers() { return peers.get(); }
+    public String getRelay() {
+        return relay.get();
+    }
+
+    public String getPubkey() {
+        return pubkey.get();
+    }
+
+    public String getPrivateKey() {
+        return privateKey;
+    }
+
+    public String getDenomination() {
+        return denomination.get();
+    }
+
+    public String getPeers() {
+        return peers.get();
+    }
+
     public String getPeersStatus() {
         String connectedPeers = "0";
-        if(this.handler != null) {
+        if (this.handler != null) {
             connectedPeers = String.valueOf(handler.getConnectedPeers());
         }
         return connectedPeers + "/" + peers.get();
     }
 
-    public String getTimeout() { return timeout.get(); }
+    public String getTimeout() {
+        return timeout.get();
+    }
+
     public Identity getJoinstrIdentity() {
         Identity joinstrIdentity = null;
         try {
-            if(!privateKey.isEmpty())
+            if (!privateKey.isEmpty())
                 joinstrIdentity = Identity.create(privateKey);
-            else if(handler != null && !handler.getPoolPrivateKey().isEmpty()) {
+            else if (handler != null && !handler.getPoolPrivateKey().isEmpty()) {
                 privateKey = handler.getPoolPrivateKey();
                 joinstrIdentity = Identity.create(privateKey);
             }
@@ -93,10 +111,17 @@ public class JoinstrPool {
         return joinstrIdentity;
     }
 
-    public String getStatus() { return status.get();}
-    public void setStatus(String status) {this.status.set(status);}
+    public String getStatus() {
+        return status.get();
+    }
 
-    public SimpleStringProperty statusProperty() {return status;}
+    public void setStatus(String status) {
+        this.status.set(status);
+    }
+
+    public SimpleStringProperty statusProperty() {
+        return status;
+    }
 
     public static void importPoolsFile(String directoryPath) {
 
@@ -105,8 +130,7 @@ public class JoinstrPool {
         fileChooser.setInitialFileName("pools.json");
         fileChooser.setInitialDirectory(new File(directoryPath));
         fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Json files", "*.json")
-        );
+                new FileChooser.ExtensionFilter("Json files", "*.json"));
         File file = fileChooser.showOpenDialog(null);
         StringBuilder text = new StringBuilder();
         Scanner scanner;
@@ -121,10 +145,11 @@ public class JoinstrPool {
             logger.warning("Error: " + e.getMessage());
         }
 
-        if(!text.isEmpty()) {
+        if (!text.isEmpty()) {
             try {
                 Gson gson = new Gson();
-                Type mapType = new TypeToken<JoinstrPoolStoreWrapper>(){}.getType();
+                Type mapType = new TypeToken<JoinstrPoolStoreWrapper>() {
+                }.getType();
                 JoinstrPoolStoreWrapper psWrapper = gson.fromJson(text.toString(), mapType);
                 Config.get().setPoolStore(psWrapper.getPools());
             } catch (Exception e) {
@@ -141,11 +166,10 @@ public class JoinstrPool {
         fileChooser.setInitialFileName("pools.json");
         fileChooser.setInitialDirectory(new File(directoryPath));
         fileChooser.getExtensionFilters().addAll(
-                new FileChooser.ExtensionFilter("Json files", "*.json")
-        );
+                new FileChooser.ExtensionFilter("Json files", "*.json"));
 
         File file = fileChooser.showSaveDialog(null);
-        if(file != null)
+        if (file != null)
             savePoolsFile(file.getPath());
 
     }
@@ -156,7 +180,7 @@ public class JoinstrPool {
         ArrayList<JoinstrPool> poolStore = Config.get().getPoolStore();
         JoinstrPool[] pools = poolStore.toArray(new JoinstrPool[0]);
         String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(pools));
-        try(FileWriter writer = new FileWriter(filePath)) {
+        try (FileWriter writer = new FileWriter(filePath)) {
             writer.write(poolsJson);
         }
 
@@ -175,7 +199,8 @@ public class JoinstrPool {
     }
 
     public void stopListeningForCredentials() {
-        if(handler != null) handler.stop();
+        if (handler != null)
+            handler.stop();
     }
 
     private JoinstrPoolData toJoinstrPoolData() {
@@ -209,16 +234,18 @@ public class JoinstrPool {
 
     private static class JoinstrPoolStoreWrapper {
         public ArrayList<JoinstrPoolData> poolsList;
+
         public JoinstrPoolStoreWrapper(JoinstrPool[] poolsObj) {
             poolsList = new ArrayList<>();
-            for(JoinstrPool pool : poolsObj) {
+            for (JoinstrPool pool : poolsObj) {
                 poolsList.add(pool.toJoinstrPoolData());
             }
         }
+
         public ArrayList<JoinstrPool> getPools() {
             ArrayList<JoinstrPool> pools = new ArrayList<>();
 
-            for(JoinstrPoolData poolData : poolsList) {
+            for (JoinstrPoolData poolData : poolsList) {
                 pools.add(poolData.getPoolObject());
             }
 
