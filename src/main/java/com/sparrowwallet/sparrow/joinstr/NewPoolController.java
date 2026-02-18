@@ -3,16 +3,18 @@ package com.sparrowwallet.sparrow.joinstr;
 import static com.sparrowwallet.sparrow.AppServices.showSuccessDialog;
 
 import com.sparrowwallet.drongo.address.Address;
-import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
-import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
+import com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog;
 import com.sparrowwallet.sparrow.wallet.PaymentController;
 
 import java.io.IOException;
+import java.text.DecimalFormat;
+import java.text.DecimalFormatSymbols;
 import java.util.ArrayList;
+import java.util.Locale;
 import java.util.Map;
 import java.util.logging.Logger;
 
@@ -21,6 +23,7 @@ import javafx.scene.control.TextField;
 
 import nostr.event.impl.GenericEvent;
 import nostr.id.Identity;
+import com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog;
 
 public class NewPoolController extends JoinstrFormController {
 
@@ -38,6 +41,15 @@ public class NewPoolController extends JoinstrFormController {
     public void initializeView() {
     }
 
+    @Override
+    public void refreshView() {
+
+    }
+
+    @Override
+    public void close() throws Exception {
+    }
+
     @FXML
     private void handleCreateButton() {
         try {
@@ -52,7 +64,8 @@ public class NewPoolController extends JoinstrFormController {
 
             try {
                 double denominationValue = Double.parseDouble(denomination);
-                denomination = String.format("%.8s", denominationValue);
+                DecimalFormat df = new DecimalFormat("#.########", DecimalFormatSymbols.getInstance(Locale.US));
+                denomination = df.format(denominationValue);
                 if (denominationValue <= 0) {
                     showError("Denomination must be greater than zero");
                     return;
@@ -75,16 +88,30 @@ public class NewPoolController extends JoinstrFormController {
 
             Address bitcoinAddress;
             Wallet wallet;
-            try {
+
+            GenericEvent event = null;
+
+            try (NostrPublisher nostrPublisher = new NostrPublisher()) {
+
                 Map<Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
+                Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet;
+
                 if (openWallets.isEmpty()) {
                     throw new Exception("No wallet found. Please open a wallet in Sparrow first.");
+                } else if (openWallets.keySet().stream().filter(Wallet::isValid).count() > 1) {
+                    WalletSelectionDialog walletSelectionDialog = new WalletSelectionDialog(openWallets);
+                    walletSelectionDialog.showAndWait();
+                    selectedWallet = walletSelectionDialog.getSelectedWallet();
+                    if (selectedWallet == null) {
+                        throw new IllegalStateException("No wallet selected");
+                    }
+                } else {
+                    selectedWallet = openWallets.entrySet().iterator().next();
                 }
 
-                Map.Entry<Wallet, Storage> firstWallet = openWallets.entrySet().iterator().next();
-                wallet = firstWallet.getKey();
-                Storage storage = firstWallet.getValue();
-                bitcoinAddress = NostrPublisher.getNewReceiveAddress(storage, wallet);
+                wallet = selectedWallet.getKey();
+                Storage storage = selectedWallet.getValue();
+                bitcoinAddress = nostrPublisher.getNewReceiveAddress(storage, wallet);
 
                 double recipientDustThreshold = (double) PaymentController.getRecipientDustThreshold(bitcoinAddress)
                         / 100000000;
@@ -93,19 +120,15 @@ public class NewPoolController extends JoinstrFormController {
                             + recipientDustThreshold + ")");
                 }
 
-            } catch (Exception e) {
-                showError(e.getMessage());
-                return;
-            }
+                event = nostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
 
-            GenericEvent event = null;
-            try {
+                if (event == null) {
+                    showError("Failed to publish pool event");
+                    return;
+                }
 
-                event = NostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
-                assert event != null;
-
-                String poolPrivateKey = NostrPublisher.getPoolPrivateKey();
-                JoinstrEvent joinstrEvent = new JoinstrEvent(event.getContent());
+                String poolPrivateKey = nostrPublisher.getPoolPrivateKey();
+                JoinstrEvent joinstrEvent = JoinstrEvent.fromJson(event.getContent());
 
                 JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key,
                         joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
@@ -124,7 +147,6 @@ public class NewPoolController extends JoinstrFormController {
             denominationField.clear();
             peersField.clear();
 
-            assert event != null;
             showSuccessDialog(
                     "New Pool",
                     "Pool created successfully!\nEvent ID: " + event.getId() +
@@ -133,7 +155,7 @@ public class NewPoolController extends JoinstrFormController {
                             "\n\nWaiting for peers to join...");
 
         } catch (Exception e) {
-            showError("An error occurred: " + e.getMessage());
+            showError("Error: " + e.getMessage());
         }
     }
 
@@ -225,7 +247,7 @@ public class NewPoolController extends JoinstrFormController {
 
         ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
 
-        pools.removeIf(p -> p.getJoinstrIdentity() == pool.getJoinstrIdentity());
+        pools.removeIf(p -> p.getPubkey() != null && p.getPubkey().equals(pool.getPubkey()));
         pools.add(pool);
         Config.get().setPoolStore(pools);
 
@@ -241,5 +263,4 @@ public class NewPoolController extends JoinstrFormController {
             logger.info("Received message: " + decryptedMessage);
         });
     }
-
 }

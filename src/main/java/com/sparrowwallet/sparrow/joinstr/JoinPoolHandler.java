@@ -98,6 +98,7 @@ public class JoinPoolHandler {
             Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
 
             String poolPrivateKey = credentials.get("private_key").toString();
+            this.poolPrivateKeyString = poolPrivateKey;
             poolIdentity = Identity.create(poolPrivateKey);
 
             JoinstrPool poolWithCredentials = new JoinstrPool(
@@ -117,7 +118,9 @@ public class JoinPoolHandler {
             this.pool = poolWithCredentials;
 
             try {
-                credentialsListener.stop();
+                if (credentialsListener != null) {
+                    credentialsListener.close();
+                }
             } catch (Exception e) {
                 logger.warning("Error stopping credentials listener: " + e.getMessage());
             }
@@ -208,7 +211,8 @@ public class JoinPoolHandler {
             // Filter UTXOs by pool denomination
             long poolAmountSats = coinjoinHandler.getPoolAmountSats();
 
-            UtxoCircleDialog dialog = new UtxoCircleDialog(wallet);
+            com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog dialog = new com.sparrowwallet.sparrow.joinstr.control.UtxoCircleDialog(
+                    wallet);
             dialog.setTitle("Select UTXO for Coinjoin");
             dialog.showAndWait();
 
@@ -244,7 +248,7 @@ public class JoinPoolHandler {
     public void stop() {
         try {
             if (credentialsListener != null) {
-                credentialsListener.stop();
+                credentialsListener.close();
             }
             if (coinjoinHandler != null) {
                 coinjoinHandler.stopListening();
@@ -253,4 +257,28 @@ public class JoinPoolHandler {
             logger.warning("Error stopping listeners: " + e.getMessage());
         }
     }
+
+    public int getConnectedPeers() {
+        if (coinjoinHandler != null) {
+            return coinjoinHandler.getOutputAddresses().size();
+        }
+        return 0;
+    }
+
+    public String getPoolPrivateKey() {
+        // If poolIdentity is set, we can try to return it
+        // But better to return the string if we have it
+        // For now, if we don't store the string specifically, we can't easily return it
+        // unless Identity exposes it.
+        // Let's modify handleCredentialsReceived to store it, or assume empty if not
+        // set.
+        if (poolIdentity != null) {
+            // Assuming Identity has a way to export, but if not, we should have stored it.
+            // Let's rely on handleCredentialsReceived modification.
+            return poolPrivateKeyString;
+        }
+        return "";
+    }
+
+    private String poolPrivateKeyString = "";
 }

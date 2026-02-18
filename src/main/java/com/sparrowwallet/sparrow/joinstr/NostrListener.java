@@ -2,6 +2,7 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.google.gson.Gson;
 import nostr.api.NIP04;
 import nostr.base.PublicKey;
 import nostr.client.Client;
@@ -15,8 +16,6 @@ import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 
 import java.util.*;
-import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
@@ -24,13 +23,16 @@ import java.util.logging.Logger;
 import java.util.logging.Handler;
 import java.util.function.Consumer;
 
-public class NostrListener {
+public class NostrListener implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
+    private static final Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
     private final Identity identity;
     private final String relay;
     private Client client;
     private Consumer<String> messageHandler;
     private final Map<String, String> poolCredentials;
+    private static final ConsoleHandler consoleLogHandler = new ConsoleHandler();
+    private transient Handler eventMessageHandler = null;
 
     public NostrListener(Identity identity, String relay, Map<String, String> poolCredentials) {
         this.identity = identity;
@@ -39,12 +41,13 @@ public class NostrListener {
         setupLogging();
     }
 
-    private void setupLogging() {
-        Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
+    private static void setupLogging() {
         textLogger.setLevel(Level.INFO);
-        ConsoleHandler handler = new ConsoleHandler();
-        handler.setLevel(Level.INFO);
-        textLogger.addHandler(handler);
+        consoleLogHandler.setLevel(Level.INFO);
+        synchronized (textLogger) {
+            if (textLogger.getHandlers().length == 0)
+                textLogger.addHandler(consoleLogHandler);
+        }
     }
 
     public void startListening(Consumer<String> messageHandler) {
@@ -54,22 +57,24 @@ public class NostrListener {
     }
 
     private void setupEventHandler() {
-        Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
-        textLogger.addHandler(new Handler() {
+        eventMessageHandler = new Handler() {
             @Override
             public void publish(java.util.logging.LogRecord record) {
                 String message = record.getMessage();
-                if (message.contains("WebSocket received: [\"EVENT\"")) {
+                if (message != null && message.contains("WebSocket received: [\"EVENT\"")) {
                     handleEventMessage(message);
                 }
             }
 
             @Override
-            public void flush() {}
+            public void flush() {
+            }
 
             @Override
-            public void close() {}
-        });
+            public void close() {
+            }
+        };
+        textLogger.addHandler(eventMessageHandler);
     }
 
     private void handleEventMessage(String message) {
@@ -89,7 +94,7 @@ public class NostrListener {
             String recipientPubkey = null;
             if (tags != null && tags.isArray()) {
                 for (JsonNode tag : tags) {
-                    if (tag.isArray() && tag.size() > 0 && "p".equals(tag.get(0).asText())) {
+                    if (tag.isArray() && !tag.isEmpty() && "p".equals(tag.get(0).asText())) {
                         recipientPubkey = tag.get(1).asText();
                         break;
                     }
@@ -107,8 +112,7 @@ public class NostrListener {
                 String decryptedContent = NIP04.decrypt(
                         identity,
                         encryptedContent,
-                        new PublicKey(senderPubkey)
-                );
+                        new PublicKey(senderPubkey));
 
                 if (decryptedContent.contains("\"type\": \"join_pool\"") && poolCredentials != null) {
                     handleJoinRequest(senderPubkey);
@@ -123,7 +127,7 @@ public class NostrListener {
                 logger.fine("Failed to decrypt message (may not be for us): " + e.getMessage());
             }
         } catch (Exception e) {
-            logger.severe("Error handling event message: " + e.getMessage());
+            logger.severe("Error: " + e.getMessage());
         }
     }
 
@@ -134,26 +138,17 @@ public class NostrListener {
         }
 
         try {
-            String credentialsJson = String.format(
-                    "{\n" +
-                            "  \"id\": \"%s\",\n" +
-                            "  \"public_key\": \"%s\",\n" +
-                            "  \"denomination\": %s,\n" +
-                            "  \"peers\": %s,\n" +
-                            "  \"timeout\": %s,\n" +
-                            "  \"relay\": \"%s\",\n" +
-                            "  \"private_key\": \"%s\",\n" +
-                            "  \"fee_rate\": %s\n" +
-                            "}",
-                    poolCredentials.get("id"),
-                    poolCredentials.get("public_key"),
-                    poolCredentials.get("denomination"),
-                    poolCredentials.get("peers"),
-                    poolCredentials.get("timeout"),
-                    poolCredentials.get("relay"),
-                    poolCredentials.get("private_key"),
-                    poolCredentials.get("fee_rate")
-            );
+            Gson gson = new Gson();
+            Map<String, Object> credentialsMap = new LinkedHashMap<>();
+            credentialsMap.put("id", poolCredentials.get("id"));
+            credentialsMap.put("public_key", poolCredentials.get("public_key"));
+            credentialsMap.put("denomination", poolCredentials.get("denomination"));
+            credentialsMap.put("peers", poolCredentials.get("peers"));
+            credentialsMap.put("timeout", poolCredentials.get("timeout"));
+            credentialsMap.put("relay", poolCredentials.get("relay"));
+            credentialsMap.put("private_key", poolCredentials.get("private_key"));
+            credentialsMap.put("fee_rate", poolCredentials.get("fee_rate"));
+            String credentialsJson = gson.toJson(credentialsMap);
 
             List<BaseTag> tags = new ArrayList<>();
             tags.add(new PubKeyTag(new PublicKey(requesterPubkey)));
@@ -162,15 +157,13 @@ public class NostrListener {
             String encryptedCredentials = nip04.encrypt(
                     identity,
                     credentialsJson,
-                    new PublicKey(requesterPubkey)
-            );
+                    new PublicKey(requesterPubkey));
 
             GenericEvent credentialsEvent = new GenericEvent(
                     identity.getPublicKey(),
                     Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
                     tags,
-                    encryptedCredentials
-            );
+                    encryptedCredentials);
 
             nip04.setEvent(credentialsEvent);
             nip04.sign();
@@ -178,7 +171,7 @@ public class NostrListener {
 
             logger.info("Sent pool credentials to: " + requesterPubkey);
         } catch (Exception e) {
-            logger.severe("Failed to send pool credentials: " + e.getMessage());
+            logger.severe("Error: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -203,40 +196,22 @@ public class NostrListener {
 
             logger.info("Started listening for encrypted messages on " + relay);
         } catch (Exception e) {
-            logger.severe("Failed to connect and subscribe: " + e.getMessage());
+            logger.severe("Error: " + e.getMessage());
             throw new RuntimeException("Failed to start listener", e);
         }
     }
 
-    public void stop() throws TimeoutException {
+    @Override
+    public void close() throws TimeoutException {
+        if (eventMessageHandler != null) {
+            textLogger.removeHandler(eventMessageHandler);
+            eventMessageHandler = null;
+        }
+
         if (client != null) {
             client.disconnect();
+            client = null;
             logger.info("Stopped listening for messages");
         }
-    }
-
-    public CompletableFuture<String> waitForJoinRequest(long timeoutMillis) {
-        CompletableFuture<String> future = new CompletableFuture<>();
-
-        Consumer<String> handler = decryptedMessage -> {
-            if (decryptedMessage.contains("\"type\": \"join_pool\"")) {
-                future.complete(decryptedMessage);
-            }
-        };
-
-        startListening(handler);
-
-        CompletableFuture.delayedExecutor(timeoutMillis, TimeUnit.MILLISECONDS).execute(() -> {
-            if (!future.isDone()) {
-                future.completeExceptionally(new TimeoutException("No join request received within timeout"));
-                try {
-                    stop();
-                } catch (TimeoutException e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
-
-        return future;
     }
 }

@@ -14,11 +14,10 @@ import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
-import com.sparrowwallet.sparrow.EventManager;
-import com.sparrowwallet.sparrow.event.WalletHistoryFinishedEvent;
 import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.net.ElectrumServer;
 import javafx.application.Platform;
+import javafx.concurrent.Task;
 import nostr.api.NIP04;
 import nostr.event.BaseTag;
 import nostr.event.Kind;
@@ -29,6 +28,8 @@ import org.bouncycastle.util.encoders.Base64;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 import java.util.function.Consumer;
 import java.util.logging.Logger;
 
@@ -58,6 +59,8 @@ public class CoinjoinHandler {
     private Storage storage;
     private NostrListener messageListener;
     private Runnable onReadyForInputCallback;
+
+    private final ExecutorService executorService = Executors.newSingleThreadExecutor();
 
     public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.poolIdentity = poolIdentity;
@@ -106,30 +109,32 @@ public class CoinjoinHandler {
     }
 
     private void sendOutputToPool(String address) {
-        try {
-            String outputContent = String.format("{\"type\":\"output\",\"address\":\"%s\"}", address);
+        executorService.submit(() -> {
+            try {
+                String outputContent = String.format("{\"type\":\"output\",\"address\":\"%s\"}", address);
 
-            List<BaseTag> tags = new ArrayList<>();
-            tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
+                List<BaseTag> tags = new ArrayList<>();
+                tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
 
-            NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
-            String encryptedContent = nip04.encrypt(poolIdentity, outputContent, poolIdentity.getPublicKey());
+                NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
+                String encryptedContent = nip04.encrypt(poolIdentity, outputContent, poolIdentity.getPublicKey());
 
-            GenericEvent outputEvent = new GenericEvent(
-                    poolIdentity.getPublicKey(),
-                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
-                    tags,
-                    encryptedContent);
+                GenericEvent outputEvent = new GenericEvent(
+                        poolIdentity.getPublicKey(),
+                        Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
+                        tags,
+                        encryptedContent);
 
-            nip04.setEvent(outputEvent);
-            nip04.sign();
-            nip04.send(Map.of("default", relay));
+                nip04.setEvent(outputEvent);
+                nip04.sign();
+                nip04.send(Map.of("default", relay));
 
-            logger.info("Output registered: " + address);
-        } catch (Exception e) {
-            logger.severe("Failed to send output: " + e.getMessage());
-            updateStatus("Error: " + e.getMessage());
-        }
+                logger.info("Output registered: " + address);
+            } catch (Exception e) {
+                logger.severe("Failed to send output: " + e.getMessage());
+                updateStatus("Error: " + e.getMessage());
+            }
+        });
     }
 
     private void startListeningForMessages() {
@@ -185,44 +190,52 @@ public class CoinjoinHandler {
                 ", value=" + selectedUtxo.getValue() + " sats");
         updateStatus("Creating PSBT");
 
-        try {
-            PSBT psbt = createCoinjoinPSBT(selectedUtxo, utxoNode);
-            if (psbt == null) {
-                updateStatus("Error: Failed to create PSBT");
-                return;
+        Task<Void> task = new Task<>() {
+            @Override
+            protected Void call() throws Exception {
+                try {
+                    PSBT psbt = createCoinjoinPSBT(selectedUtxo, utxoNode);
+                    if (psbt == null) {
+                        updateStatus("Error: Failed to create PSBT");
+                        return null;
+                    }
+
+                    // Sign the PSBT
+                    updateStatus("Signing PSBT");
+                    signPSBT(psbt, selectedUtxo, utxoNode);
+
+                    // Verify signing worked
+                    PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
+                    logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
+                            ", isFinalized: " + psbtInput.isFinalized() +
+                            ", partialSigs: "
+                            + (psbtInput.getPartialSignatures() != null ? psbtInput.getPartialSignatures().size() : 0));
+
+                    if (!psbtInput.isSigned() && !psbtInput.isFinalized()) {
+                        logger.severe("PSBT signing failed - no signatures present");
+                        updateStatus("Error: Signing failed");
+                        return null;
+                    }
+
+                    // Serialize and send
+                    byte[] psbtBytes = psbt.serialize();
+                    myPsbtBase64 = Base64.toBase64String(psbtBytes);
+                    inputPSBTs.add(myPsbtBase64);
+
+                    logger.info("Sending signed PSBT to pool, size: " + psbtBytes.length + " bytes");
+                    sendInputToPool(myPsbtBase64);
+                    updateStatus("Input sent, waiting for peers (" + inputPSBTs.size() + "/" + numPeers + ")");
+
+                } catch (Exception e) {
+                    logger.severe("Error in input phase: " + e.getMessage());
+                    e.printStackTrace();
+                    updateStatus("Error: " + e.getMessage());
+                }
+                return null;
             }
+        };
 
-            // Sign the PSBT
-            updateStatus("Signing PSBT");
-            signPSBT(psbt, selectedUtxo, utxoNode);
-
-            // Verify signing worked
-            PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
-            logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
-                    ", isFinalized: " + psbtInput.isFinalized() +
-                    ", partialSigs: "
-                    + (psbtInput.getPartialSignatures() != null ? psbtInput.getPartialSignatures().size() : 0));
-
-            if (!psbtInput.isSigned() && !psbtInput.isFinalized()) {
-                logger.severe("PSBT signing failed - no signatures present");
-                updateStatus("Error: Signing failed");
-                return;
-            }
-
-            // Serialize and send
-            byte[] psbtBytes = psbt.serialize();
-            myPsbtBase64 = Base64.toBase64String(psbtBytes);
-            inputPSBTs.add(myPsbtBase64);
-
-            logger.info("Sending signed PSBT to pool, size: " + psbtBytes.length + " bytes");
-            sendInputToPool(myPsbtBase64);
-            updateStatus("Input sent, waiting for peers (" + inputPSBTs.size() + "/" + numPeers + ")");
-
-        } catch (Exception e) {
-            logger.severe("Error in input phase: " + e.getMessage());
-            e.printStackTrace();
-            updateStatus("Error: " + e.getMessage());
-        }
+        executorService.submit(task);
     }
 
     private PSBT createCoinjoinPSBT(BlockTransactionHashIndex utxo, WalletNode utxoNode) {
@@ -412,7 +425,16 @@ public class CoinjoinHandler {
 
                 if (inputPSBTs.size() == numPeers) {
                     logger.info("All inputs collected, finalizing coinjoin");
-                    finalizeCoinjoin();
+
+                    // Run finalization in background
+                    Task<Void> finalizeTask = new Task<>() {
+                        @Override
+                        protected Void call() throws Exception {
+                            finalizeCoinjoin();
+                            return null;
+                        }
+                    };
+                    executorService.submit(finalizeTask);
                 }
             }
         } catch (Exception e) {
@@ -645,8 +667,9 @@ public class CoinjoinHandler {
     public void stopListening() {
         try {
             if (messageListener != null) {
-                messageListener.stop();
+                messageListener.close();
             }
+            executorService.shutdown();
         } catch (Exception e) {
             logger.warning("Error stopping listener: " + e.getMessage());
         }

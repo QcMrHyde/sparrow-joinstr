@@ -5,9 +5,7 @@ import com.sparrowwallet.sparrow.io.Config;
 import javafx.beans.value.ChangeListener;
 import javafx.beans.value.ObservableValue;
 import javafx.fxml.FXML;
-import javafx.scene.control.Label;
 import javafx.scene.control.TextField;
-import javafx.scene.control.PasswordField;
 
 public class SettingsController extends JoinstrFormController {
 
@@ -35,10 +33,19 @@ public class SettingsController extends JoinstrFormController {
         }
     }
 
+    @Override
+    public void refreshView() {
+
+    }
+
     public void setDefaultNostrRelayIfEmpty() {
         if(nostrRelayTextField.getText() == null || nostrRelayTextField.getText().isEmpty()) {
             nostrRelayTextField.setText("wss://nos.lol");
         }
     }
 
+    @Override
+    public void close() throws Exception {
+
+    }
 }

@@ -5,9 +5,13 @@ import com.sparrowwallet.sparrow.io.Config;
 
 import java.io.IOException;
 import java.net.URL;
+import java.util.EnumMap;
 import java.util.Locale;
+import java.util.Map;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.logging.Logger;
 
-import javafx.event.ActionEvent;
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
 import javafx.scene.Node;
@@ -18,7 +22,9 @@ import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
 
-public class JoinstrController extends JoinstrFormController {
+public class JoinstrController extends JoinstrFormController implements IThreadExecutor {
+
+    private static final Logger logger = Logger.getLogger(JoinstrController.class.getName());
 
     private Stage stage;
 
@@ -33,16 +39,32 @@ public class JoinstrController extends JoinstrFormController {
     @FXML
     private ToggleGroup joinstrMenu;
 
+    private final AtomicBoolean isUpdatingDisplay = new AtomicBoolean();
     private JoinstrPool selectedPool;
-
-    public JoinstrController() {
-
+    private final Map<JoinstrDisplay, Node> displayNodeCache = new EnumMap<>(JoinstrDisplay.class);
+    private final Map<JoinstrDisplay, JoinstrFormController> controllerCache = new EnumMap<>(JoinstrDisplay.class);
+    private ExecutorService executorService;
+    @Override
+    public ExecutorService getExecutorService() {
+        if(executorService == null) {
+            executorService = createExecutorService();
+            setExecutorService(executorService);
+        }
+        return executorService;
     }
+
+    @Override
+    public void setExecutorService(ExecutorService executorService) {
+        this.executorService = executorService;
+    }
+
+    public JoinstrController() { }
 
     public void initializeView() {
         joinstrMenu.selectedToggleProperty().addListener((observable, oldValue, selectedToggle) -> {
             if(selectedToggle == null) {
-                oldValue.setSelected(true);
+                if(oldValue != null)
+                    oldValue.setSelected(true);
                 return;
             }
             JoinstrDisplay display = (JoinstrDisplay)selectedToggle.getUserData();
@@ -70,6 +92,11 @@ public class JoinstrController extends JoinstrFormController {
         setJoinstrDisplay(JoinstrDisplay.NEW_POOL);
     }
 
+    @Override
+    public void refreshView() {
+
+    }
+
     public JoinstrPool getSelectedPool() {
         return this.selectedPool;
     }
@@ -79,6 +106,8 @@ public class JoinstrController extends JoinstrFormController {
     }
 
     public void setJoinstrDisplay(JoinstrDisplay display) {
+        if(!isUpdatingDisplay.compareAndSet(false, true))
+            return;
 
         int displayIndex = -1;
         for(int idx=0;idx<joinstrPane.getChildren().size();idx++) {
@@ -100,41 +129,72 @@ public class JoinstrController extends JoinstrFormController {
 
         try {
 
-            URL url = AppServices.class.getResource("joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
-            if(url == null) {
-                throw new IllegalStateException("Cannot find joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
+            Node joinstrDisplay = displayNodeCache.get(display);
+            JoinstrFormController currentFormController = controllerCache.get(display);
+
+            if(joinstrDisplay == null || currentFormController == null) {
+
+                URL url = AppServices.class.getResource("joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
+                if(url == null) {
+                    throw new IllegalStateException("Cannot find joinstr/" + display.toString().toLowerCase(Locale.ROOT) + ".fxml");
+                }
+
+                FXMLLoader displayLoader = new FXMLLoader(url);
+                joinstrDisplay = displayLoader.load();
+
+                joinstrDisplay.setUserData(display);
+
+                // Remove existing display to refresh data
+                if(displayIndex != -1) {
+                    joinstrPane.getChildren().remove(displayIndex);
+                }
+                joinstrPane.getChildren().add(joinstrDisplay);
+
+                currentFormController = displayLoader.getController();
+                JoinstrForm joinstrForm = getJoinstrForm();
+                currentFormController.setJoinstrController(this);
+                currentFormController.setJoinstrForm(joinstrForm);
+                currentFormController.initializeView();
+
+                displayNodeCache.put(display, joinstrDisplay);
+                controllerCache.put(display, currentFormController);
+
             }
 
-            FXMLLoader displayLoader = new FXMLLoader(url);
-            Node joinstrDisplay = displayLoader.load();
-
-            joinstrDisplay.setUserData(display);
-            joinstrDisplay.setViewOrder(1);
-
-            // Remove existing display to refresh data
-            if(displayIndex != -1) {
-                joinstrPane.getChildren().remove(displayIndex);
-            }
-            joinstrPane.getChildren().add(joinstrDisplay);
-
-            JoinstrFormController controller = displayLoader.getController();
-            JoinstrForm joinstrForm = getJoinstrForm();
-            controller.setJoinstrController(this);
-            controller.setJoinstrForm(joinstrForm);
-            controller.initializeView();
+            currentFormController.refreshView();
+            joinstrDisplay.setViewOrder(0);
 
         } catch (IOException e) {
             throw new IllegalStateException("Can't find pane", e);
+        } finally {
+            isUpdatingDisplay.set(false);
         }
 
+    }
+
+    public Stage getStage() {
+        return this.stage;
     }
 
     public void setStage(Stage stage) {
         this.stage = stage;
     }
 
-    public void close(ActionEvent event) {
-        stage.close();
+    @Override
+    public void close() {
+        try {
+
+            for(JoinstrFormController formController : controllerCache.values()) {
+                formController.close();
+            }
+            controllerCache.clear();
+
+            shutdownThreads();
+            stage.close();
+
+        } catch (Exception e) {
+            logger.severe("Error stopping threads: " + e.getMessage());
+        }
     }
 
 }

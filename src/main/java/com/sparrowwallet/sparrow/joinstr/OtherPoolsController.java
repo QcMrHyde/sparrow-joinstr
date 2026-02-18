@@ -19,17 +19,18 @@ import nostr.event.message.ReqMessage;
 import nostr.id.Identity;
 
 import java.time.Instant;
-import java.time.ZoneOffset;
-import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
-import java.util.logging.ConsoleHandler;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class OtherPoolsController extends JoinstrFormController {
+
+    private static final int POOL_REFRESH_TIME = 30000;
     private static final Logger logger = Logger.getLogger(OtherPoolsController.class.getName());
     private static final String DEFAULT_RELAY = "wss://nos.lol";
+    private static final Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
 
     @FXML
     private VBox contentVBox;
@@ -43,6 +44,9 @@ public class OtherPoolsController extends JoinstrFormController {
     private Timer poolRefreshTimer;
 
     private ArrayList<JoinstrPool> myPools;
+
+    private java.util.logging.Handler currentEventHandler;
+    private final AtomicBoolean isFetching = new AtomicBoolean(false);
 
     @Override
     public void initializeView() {
@@ -77,43 +81,51 @@ public class OtherPoolsController extends JoinstrFormController {
                 filterPools(newValue);
             });
 
-            myPools = Config.get().getPoolStore();
-
-            startPoolRefresh();
-
-            fetchPools();
+            refreshView();
 
         } catch (Exception e) {
-            if(e != null) {
-                logger.severe("Error initializing view: " + e.getMessage());
-                e.printStackTrace();
-            }
+            logger.severe("Error initializing view: " + e.getMessage());
+            e.printStackTrace();
         }
     }
 
+    @Override
+    public void refreshView() {
+        myPools = Config.get().getPoolStore();
+        startPoolRefresh();
+        fetchPools();
+    }
+
     private void startPoolRefresh() {
+        if(poolRefreshTimer != null)
+            poolRefreshTimer.cancel();
         poolRefreshTimer = new Timer(true);
         poolRefreshTimer.scheduleAtFixedRate(new TimerTask() {
             @Override
             public void run() {
                 fetchPools();
             }
-        }, 30000, 30000); // Refresh every 30 seconds
+        }, POOL_REFRESH_TIME, POOL_REFRESH_TIME); // Refresh every 30 seconds
     }
 
     private void fetchPools() {
-        new Thread(() -> {
+
+        if (!isFetching.compareAndSet(false, true)) {
+            return;
+        }
+
+        this.getJoinstrController().submitTask(() -> {
             try {
-                Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
                 textLogger.setLevel(Level.INFO);
-                ConsoleHandler handler = new ConsoleHandler();
-                handler.setLevel(Level.INFO);
-                textLogger.addHandler(handler);
+
+                if (currentEventHandler != null) {
+                    textLogger.removeHandler(currentEventHandler);
+                }
 
                 List<JoinstrPool> pools = new CopyOnWriteArrayList<>();
                 ObjectMapper mapper = new ObjectMapper();
 
-                java.util.logging.Handler eventHandler = new java.util.logging.Handler() {
+                currentEventHandler = new java.util.logging.Handler() {
                     @Override
                     public void publish(java.util.logging.LogRecord record) {
                         String message = record.getMessage();
@@ -134,20 +146,16 @@ public class OtherPoolsController extends JoinstrFormController {
                                                 return;
                                             }
 
-                                            String formattedTimeout = Instant.ofEpochSecond(timeout)
-                                                    .atZone(ZoneOffset.UTC)
-                                                    .format(DateTimeFormatter.ofPattern("HH:mm:ss z"));
-
                                             JoinstrPool pool = new JoinstrPool(
                                                     poolData.get("relay").asText(),
                                                     poolData.get("public_key").asText(),
-                                                    poolData.get("denomination").asText() + " BTC",
-                                                    "0/" + poolData.get("peers").asText(),
-                                                    formattedTimeout
+                                                    poolData.get("denomination").asText(),
+                                                    poolData.get("peers").asText(),
+                                                    String.valueOf(timeout)
                                             );
 
                                             if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
-                                               myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                                                    myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
 
                                                 pools.add(pool);
                                                 logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
@@ -171,7 +179,7 @@ public class OtherPoolsController extends JoinstrFormController {
                     public void close() {}
                 };
 
-                textLogger.addHandler(eventHandler);
+                textLogger.addHandler(currentEventHandler);
 
                 Identity identity = Identity.generateRandomIdentity();
 
@@ -188,23 +196,34 @@ public class OtherPoolsController extends JoinstrFormController {
                 context.setPrivateKey(identity.getPrivateKey().getRawData());
                 context.setRelays(Map.of("default", DEFAULT_RELAY));
 
-                client.connect(context);
-                client.send(reqMessage);
+                try {
+                    client.connect(context);
+                    client.send(reqMessage);
 
-                Thread.sleep(5000);
+                    Thread.sleep(5000);
 
-                client.disconnect();
+                    textLogger.removeHandler(currentEventHandler);
+                    currentEventHandler = null;
 
-                textLogger.removeHandler(eventHandler);
+                    Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
 
-                Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    logger.warning("Sleep interrupted: " + e.getMessage());
+                } finally {
+                    if(!Thread.currentThread().isInterrupted())
+                        client.disconnect();
+                    isFetching.set(false);
+                }
 
             } catch (Exception e) {
                 logger.severe("Error fetching pools: " + e.getMessage());
                 e.printStackTrace();
                 Platform.runLater(() -> showError("Failed to fetch pools: " + e.getMessage()));
+                isFetching.set(false);
             }
-        }).start();
+        });
+
     }
 
     private void updateUIWithPools(List<JoinstrPool> pools) {
@@ -233,4 +252,21 @@ public class OtherPoolsController extends JoinstrFormController {
         }
     }
 
+    @Override
+    public void close() throws Exception {
+        if (currentEventHandler != null) {
+            textLogger.removeHandler(currentEventHandler);
+            currentEventHandler = null;
+        }
+
+        if (poolRefreshTimer != null) {
+            poolRefreshTimer.cancel();
+            poolRefreshTimer = null;
+        }
+
+        if (joinstrPoolList != null) {
+            joinstrPoolList.clearPools();
+        }
+        joinstrInfoPane = null;
+    }
 }
