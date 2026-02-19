@@ -25,6 +25,7 @@ public class JoinstrPool {
     private final SimpleStringProperty peers;
     private final SimpleStringProperty timeout;
     private final SimpleStringProperty status;
+    private final javafx.beans.property.SimpleIntegerProperty connectedPeers;
     private String privateKey;
     private JoinPoolHandler handler;
 
@@ -37,6 +38,7 @@ public class JoinstrPool {
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = "";
         this.status = new SimpleStringProperty("");
+        this.connectedPeers = new javafx.beans.property.SimpleIntegerProperty(0);
     }
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -48,7 +50,7 @@ public class JoinstrPool {
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = privateKey;
         this.status = new SimpleStringProperty("");
-
+        this.connectedPeers = new javafx.beans.property.SimpleIntegerProperty(0);
     }
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -60,7 +62,7 @@ public class JoinstrPool {
         this.timeout = new SimpleStringProperty(timeout);
         this.privateKey = privateKey;
         this.status = new SimpleStringProperty(status);
-
+        this.connectedPeers = new javafx.beans.property.SimpleIntegerProperty(0);
     }
 
     public String getRelay() {
@@ -75,6 +77,10 @@ public class JoinstrPool {
         return privateKey;
     }
 
+    public void setPrivateKey(String privateKey) {
+        this.privateKey = privateKey;
+    }
+
     public String getDenomination() {
         return denomination.get();
     }
@@ -83,12 +89,26 @@ public class JoinstrPool {
         return peers.get();
     }
 
+    public int getConnectedPeers() {
+        return connectedPeers.get();
+    }
+
+    public void setConnectedPeers(int count) {
+        javafx.application.Platform.runLater(() -> connectedPeers.set(count));
+    }
+
+    public javafx.beans.property.SimpleIntegerProperty connectedPeersProperty() {
+        return connectedPeers;
+    }
+
     public String getPeersStatus() {
-        String connectedPeers = "0";
-        if (this.handler != null) {
-            connectedPeers = String.valueOf(handler.getConnectedPeers());
-        }
-        return connectedPeers + "/" + peers.get();
+        return getConnectedPeers() + "/" + peers.get();
+    }
+
+    public javafx.beans.binding.StringBinding peersStatusProperty() {
+        return javafx.beans.binding.Bindings.createStringBinding(
+                () -> getConnectedPeers() + "/" + getPeers(),
+                connectedPeers, peers);
     }
 
     public String getTimeout() {
