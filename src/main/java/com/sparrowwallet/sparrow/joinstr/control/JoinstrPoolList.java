@@ -70,11 +70,7 @@ public class JoinstrPoolList extends VBox {
         denominationColumn.setPrefWidth(100);
 
         TableColumn<JoinstrPool, String> peersColumn = new TableColumn<>("Peers");
-        peersColumn.setCellValueFactory(cellData -> {
-            JoinstrPool pool = cellData.getValue();
-            String peersStatus = pool.getPeersStatus();
-            return new SimpleStringProperty(peersStatus);
-        });
+        peersColumn.setCellValueFactory(cellData -> cellData.getValue().peersStatusProperty());
         peersColumn.setPrefWidth(50);
 
         TableColumn<JoinstrPool, String> timeoutColumn = new TableColumn<>("Timeout");
@@ -102,8 +98,7 @@ public class JoinstrPoolList extends VBox {
                 denominationColumn,
                 peersColumn,
                 timeoutColumn,
-                statusColumn
-        );
+                statusColumn);
 
         poolTableView.setOnSort(event -> {
 
@@ -121,9 +116,11 @@ public class JoinstrPoolList extends VBox {
                     } else if (column == pubkeyColumn) {
                         columnComparator = Comparator.comparing(JoinstrPool::getPubkey, String.CASE_INSENSITIVE_ORDER);
                     } else if (column == denominationColumn) {
-                        columnComparator = Comparator.comparing(JoinstrPool::getDenomination, String.CASE_INSENSITIVE_ORDER);
+                        columnComparator = Comparator.comparing(JoinstrPool::getDenomination,
+                                String.CASE_INSENSITIVE_ORDER);
                     } else if (column == peersColumn) {
-                        columnComparator = Comparator.comparing(JoinstrPool::getPeersStatus, String.CASE_INSENSITIVE_ORDER);
+                        columnComparator = Comparator.comparing(JoinstrPool::getPeersStatus,
+                                String.CASE_INSENSITIVE_ORDER);
                     } else if (column == timeoutColumn) {
                         columnComparator = Comparator.comparing(JoinstrPool::getTimeout, String.CASE_INSENSITIVE_ORDER);
                     }
@@ -157,14 +154,13 @@ public class JoinstrPoolList extends VBox {
                     if (onPoolSelectedListener != null) {
                         onPoolSelectedListener.accept(newSelection);
                     }
-                }
-        );
+                });
 
         getChildren().add(poolTableView);
         setVgrow(poolTableView, javafx.scene.layout.Priority.ALWAYS);
     }
 
-    public void configureWithJoinButtons() {
+    public void configureWithJoinButtons(Runnable onJoinCallback) {
         TableColumn<JoinstrPool, Void> joinButtonColumn = new TableColumn<>("");
         joinButtonColumn.setPrefWidth(100);
         joinButtonColumn.setStyle("-fx-alignment:CENTER;");
@@ -177,8 +173,7 @@ public class JoinstrPoolList extends VBox {
                         joinButton.setStyle(
                                 "-fx-background-color: #2196F3; " +
                                         "-fx-text-fill: white; " +
-                                        "-fx-cursor: hand;"
-                        );
+                                        "-fx-cursor: hand;");
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
@@ -199,15 +194,32 @@ public class JoinstrPoolList extends VBox {
                                     identity.getPublicKey(),
                                     Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
                                     tags,
-                                    encryptedContent
-                            );
+                                    encryptedContent);
 
                             nip04.setEvent(encrypted_event);
                             nip04.sign();
                             nip04.send(Map.of("default", pool.getRelay()));
 
-                            Logger.getLogger(JoinstrPoolList.class.getName()).info("Join request sent. Event ID:: " + encrypted_event.getId());
+                            Logger.getLogger(JoinstrPoolList.class.getName())
+                                    .info("Join request sent. Event ID:: " + encrypted_event.getId());
                             joinButton.setDisable(true);
+
+                            java.util.ArrayList<JoinstrPool> pools = com.sparrowwallet.sparrow.io.Config.get()
+                                    .getPoolStore();
+                            if (pools.stream().noneMatch(p -> p.getPubkey().equals(pool.getPubkey()))) {
+                                pools.add(pool);
+                                com.sparrowwallet.sparrow.io.Config.get().setPoolStore(pools);
+                                try {
+                                    JoinstrPool.savePoolsFile(
+                                            com.sparrowwallet.sparrow.io.Storage.getJoinstrPoolsFile().getPath());
+                                } catch (Exception e) {
+                                }
+                            }
+
+                            if (onJoinCallback != null) {
+                                javafx.application.Platform.runLater(onJoinCallback);
+                            }
+
                             pool.startListeningForCredentials(identity);
 
                         });
@@ -240,13 +252,14 @@ public class JoinstrPoolList extends VBox {
     public void setSelectedPool(JoinstrPool poolToSelect) {
         poolTableView.getSelectionModel().select(poolToSelect);
     }
+
     public void clearPools() {
         stopAllHandlers();
         poolData.clear();
     }
 
     public void stopAllHandlers() {
-        for(JoinstrPool pool : poolData) {
+        for (JoinstrPool pool : poolData) {
             pool.stopListeningForCredentials();
         }
     }
@@ -256,11 +269,9 @@ public class JoinstrPoolList extends VBox {
             filteredData.setPredicate(p -> true);
         } else {
             String lowercaseFilter = searchText.toLowerCase();
-            filteredData.setPredicate(pool ->
-                    pool.getRelay().toLowerCase().contains(lowercaseFilter) ||
-                            pool.getPubkey().toLowerCase().contains(lowercaseFilter) ||
-                            pool.getDenomination().toLowerCase().contains(lowercaseFilter)
-            );
+            filteredData.setPredicate(pool -> pool.getRelay().toLowerCase().contains(lowercaseFilter) ||
+                    pool.getPubkey().toLowerCase().contains(lowercaseFilter) ||
+                    pool.getDenomination().toLowerCase().contains(lowercaseFilter));
         }
     }
 

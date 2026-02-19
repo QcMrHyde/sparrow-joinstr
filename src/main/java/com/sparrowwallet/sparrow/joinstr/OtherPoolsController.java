@@ -52,7 +52,9 @@ public class OtherPoolsController extends JoinstrFormController {
     public void initializeView() {
         try {
             joinstrPoolList = new JoinstrPoolList();
-            joinstrPoolList.configureWithJoinButtons();
+            joinstrPoolList.configureWithJoinButtons(() -> {
+                getJoinstrController().setJoinstrDisplay(JoinstrDisplay.MY_POOLS);
+            });
 
             noPoolsLabel = new Label("No pools found");
             noPoolsLabel.setStyle("-fx-font-size: 14px; -fx-text-fill: #666666;");
@@ -97,7 +99,7 @@ public class OtherPoolsController extends JoinstrFormController {
     }
 
     private void startPoolRefresh() {
-        if(poolRefreshTimer != null)
+        if (poolRefreshTimer != null)
             poolRefreshTimer.cancel();
         poolRefreshTimer = new Timer(true);
         poolRefreshTimer.scheduleAtFixedRate(new TimerTask() {
@@ -151,14 +153,16 @@ public class OtherPoolsController extends JoinstrFormController {
                                                     poolData.get("public_key").asText(),
                                                     poolData.get("denomination").asText(),
                                                     poolData.get("peers").asText(),
-                                                    String.valueOf(timeout)
-                                            );
+                                                    String.valueOf(timeout));
 
-                                            if(pools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
-                                                    myPools.stream().noneMatch((p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                                            if (pools.stream().noneMatch(
+                                                    (p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
+                                                    myPools.stream().noneMatch(
+                                                            (p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
 
                                                 pools.add(pool);
-                                                logger.info("Added pool: " + pool.getRelay() + " - " + pool.getDenomination());
+                                                logger.info("Added pool: " + pool.getRelay() + " - "
+                                                        + pool.getDenomination());
                                                 Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
 
                                             }
@@ -173,10 +177,12 @@ public class OtherPoolsController extends JoinstrFormController {
                     }
 
                     @Override
-                    public void flush() {}
+                    public void flush() {
+                    }
 
                     @Override
-                    public void close() {}
+                    public void close() {
+                    }
                 };
 
                 textLogger.addHandler(currentEventHandler);
@@ -185,7 +191,7 @@ public class OtherPoolsController extends JoinstrFormController {
 
                 Filters filters = Filters.builder()
                         .kinds(List.of(Kind.CONJOIN_POOL))
-                        .since(System.currentTimeMillis()/1000 - 3600) // Last hour
+                        .since(System.currentTimeMillis() / 1000 - 3600) // Last hour
                         .build();
 
                 String subId = "pools-" + System.currentTimeMillis();
@@ -211,7 +217,7 @@ public class OtherPoolsController extends JoinstrFormController {
                     Thread.currentThread().interrupt();
                     logger.warning("Sleep interrupted: " + e.getMessage());
                 } finally {
-                    if(!Thread.currentThread().isInterrupted())
+                    if (!Thread.currentThread().isInterrupted())
                         client.disconnect();
                     isFetching.set(false);
                 }
@@ -247,7 +253,7 @@ public class OtherPoolsController extends JoinstrFormController {
     }
 
     public void handleSearchButton(ActionEvent e) {
-        if(e.getSource() == searchTextField) {
+        if (e.getSource() == searchTextField) {
             filterPools(searchTextField.getText());
         }
     }

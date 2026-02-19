@@ -79,8 +79,9 @@ public class CoinjoinHandler {
     public void startOutputPhase(String myOutputAddress) {
         this.myOutputAddress = myOutputAddress;
         outputAddresses.add(myOutputAddress);
+        pool.setConnectedPeers(outputAddresses.size());
 
-        updateStatus("Registering output");
+        updateStatus("Output registered");
 
         sendOutputToPool(myOutputAddress);
 
@@ -111,7 +112,7 @@ public class CoinjoinHandler {
                 logger.info("Output registered: " + address);
             } catch (Exception e) {
                 logger.severe("Failed to send output: " + e.getMessage());
-                updateStatus("Error: " + e.getMessage());
+                updateStatus("Error: Check logs");
             }
         });
     }
@@ -142,13 +143,12 @@ public class CoinjoinHandler {
 
             if (address != null && !outputAddresses.contains(address)) {
                 outputAddresses.add(address);
+                pool.setConnectedPeers(outputAddresses.size());
                 logger.info("Received output " + outputAddresses.size() + "/" + numPeers + ": " + address);
-
-                updateStatus("Outputs: " + outputAddresses.size() + "/" + numPeers);
 
                 if (outputAddresses.size() == numPeers) {
                     logger.info("All outputs registered, ready for input registration");
-                    updateStatus("Select UTXO for input");
+                    updateStatus("Input registration");
                     if (onReadyForInputCallback != null) {
                         Platform.runLater(onReadyForInputCallback);
                     }
@@ -166,7 +166,6 @@ public class CoinjoinHandler {
         logger.info("=== COINJOIN INPUT PHASE v2 START ===");
         logger.info("UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() +
                 ", value=" + selectedUtxo.getValue() + " sats");
-        updateStatus("Creating PSBT");
 
         Task<Void> task = new Task<>() {
             @Override
@@ -174,11 +173,10 @@ public class CoinjoinHandler {
                 try {
                     PSBT psbt = createCoinjoinPSBT(selectedUtxo, utxoNode);
                     if (psbt == null) {
-                        updateStatus("Error: Failed to create PSBT");
+                        updateStatus("Error: Check logs");
                         return null;
                     }
 
-                    updateStatus("Signing PSBT");
                     signPSBT(psbt, selectedUtxo, utxoNode);
 
                     PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
@@ -189,7 +187,7 @@ public class CoinjoinHandler {
 
                     if (!psbtInput.isSigned() && !psbtInput.isFinalized()) {
                         logger.severe("PSBT signing failed - no signatures present");
-                        updateStatus("Error: Signing failed");
+                        updateStatus("Error: Check logs");
                         return null;
                     }
 
@@ -199,12 +197,11 @@ public class CoinjoinHandler {
 
                     logger.info("Sending signed PSBT to pool, size: " + psbtBytes.length + " bytes");
                     sendInputToPool(myPsbtBase64);
-                    updateStatus("Input sent, waiting for peers (" + inputPSBTs.size() + "/" + numPeers + ")");
 
                 } catch (Exception e) {
                     logger.severe("Error in input phase: " + e.getMessage());
                     e.printStackTrace();
-                    updateStatus("Error: " + e.getMessage());
+                    updateStatus("Error: Check logs");
                 }
                 return null;
             }
@@ -262,20 +259,20 @@ public class CoinjoinHandler {
         try {
             if (wallet == null || !wallet.isValid() || wallet.getKeystores().isEmpty()) {
                 logger.severe("No valid wallet available for signing");
-                updateStatus("Error: No wallet for signing");
+                updateStatus("Error: Check logs");
                 return;
             }
 
             if (utxoNode == null) {
                 logger.severe("No private key available for signing");
-                updateStatus("Error: No private key for signing");
+                updateStatus("Error: Check logs");
                 return;
             }
 
             com.sparrowwallet.drongo.wallet.Keystore keystore = wallet.getKeystores().get(0);
             if (!keystore.hasPrivateKey()) {
                 logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
-                updateStatus("Error: Hardware wallet signing not supported yet");
+                updateStatus("Error: Check logs");
                 return;
             }
 
@@ -290,7 +287,7 @@ public class CoinjoinHandler {
 
             if (privateKey == null || !privateKey.hasPrivKey()) {
                 logger.severe("Could not get private key for: " + utxoNode.getDerivationPath());
-                updateStatus("Error: Could not get private key");
+                updateStatus("Error: Check logs");
                 return;
             }
 
@@ -332,7 +329,7 @@ public class CoinjoinHandler {
         } catch (Exception e) {
             logger.severe("Error signing PSBT: " + e.getMessage());
             e.printStackTrace();
-            updateStatus("Error signing: " + e.getMessage());
+            updateStatus("Error: Check logs");
         }
     }
 
@@ -359,7 +356,7 @@ public class CoinjoinHandler {
             logger.info("Signed input sent to pool");
         } catch (Exception e) {
             logger.severe("Failed to send input: " + e.getMessage());
-            updateStatus("Error: " + e.getMessage());
+            updateStatus("Error: Check logs");
         }
     }
 
@@ -372,8 +369,6 @@ public class CoinjoinHandler {
             if (psbt != null && !inputPSBTs.contains(psbt)) {
                 inputPSBTs.add(psbt);
                 logger.info("Received input " + inputPSBTs.size() + "/" + numPeers);
-
-                updateStatus("Inputs: " + inputPSBTs.size() + "/" + numPeers);
 
                 if (inputPSBTs.size() == numPeers) {
                     logger.info("All inputs registered, finalizing coinjoin");
@@ -396,7 +391,7 @@ public class CoinjoinHandler {
 
     private void finalizeCoinjoin() {
         logger.info("PSBTs: " + inputPSBTs.size());
-        updateStatus("Finalizing coinjoin");
+        updateStatus("Finalize");
 
         try {
 
@@ -542,23 +537,23 @@ public class CoinjoinHandler {
 
             if (!ourOutputFound) {
                 logger.severe("Our output address not found in final transaction!");
-                updateStatus("Error: Output validation failed");
+                updateStatus("Error: Check logs");
                 return;
             }
 
             long fee = totalInputValue - totalOutputValue;
             logger.info("Final transaction: txid=" + finalTx.getTxId() + ", fee=" + fee + " sats");
 
-            updateStatus("Broadcasting transaction");
+            updateStatus("broadcast");
             broadcastTransaction(finalTx, fee);
 
         } catch (PSBTParseException e) {
             logger.severe("Failed to parse PSBT: " + e.getMessage());
-            updateStatus("Error: Invalid PSBT");
+            updateStatus("Error: Check logs");
         } catch (Exception e) {
             logger.severe("Error finalizing coinjoin: " + e.getMessage());
             e.printStackTrace();
-            updateStatus("Error: " + e.getMessage());
+            updateStatus("Error: Check logs");
         }
     }
 
@@ -570,6 +565,7 @@ public class CoinjoinHandler {
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
                 updateStatus("Complete");
+                pool.setStatus("Complete");
 
                 stopListening();
             });
@@ -577,14 +573,14 @@ public class CoinjoinHandler {
             broadcastService.setOnFailed(event -> {
                 Throwable error = broadcastService.getException();
                 logger.severe("Failed to broadcast: " + error.getMessage());
-                updateStatus("Broadcast failed: " + error.getMessage());
+                updateStatus("Error: Check logs");
             });
 
             broadcastService.start();
 
         } catch (Exception e) {
             logger.severe("Error broadcasting transaction: " + e.getMessage());
-            updateStatus("Error: " + e.getMessage());
+            updateStatus("Error: Check logs");
         }
     }
 

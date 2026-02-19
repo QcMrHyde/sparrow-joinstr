@@ -168,7 +168,7 @@ public class NewPoolController extends JoinstrFormController {
             Identity poolIdentity = Identity.create(poolPrivateKey);
 
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, status -> {
-                logger.info("Pool creator status: " + status);
+                javafx.application.Platform.runLater(() -> pool.setStatus(status));
             });
 
             coinjoinHandler.setOnReadyForInputCallback(() -> {

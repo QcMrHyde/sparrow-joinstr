@@ -73,21 +73,22 @@ public class JoinPoolHandler {
             this.poolPrivateKeyString = poolPrivateKey;
             poolIdentity = Identity.create(poolPrivateKey);
 
-            JoinstrPool poolWithCredentials = new JoinstrPool(
-                    credentials.get("relay").toString(),
-                    credentials.get("public_key").toString(),
-                    pool.getDenomination(),
-                    credentials.get("peers").toString(),
-                    credentials.get("timeout").toString(),
-                    poolPrivateKey);
+            this.pool.setPrivateKey(poolPrivateKey);
 
             ArrayList<JoinstrPool> pools = Config.get().getPoolStore();
-            pools.removeIf(p -> p.getPubkey().equals(poolWithCredentials.getPubkey()));
-            pools.add(poolWithCredentials);
+            boolean updated = false;
+            for (int i = 0; i < pools.size(); i++) {
+                if (pools.get(i).getPubkey().equals(pool.getPubkey())) {
+                    pools.set(i, pool);
+                    updated = true;
+                    break;
+                }
+            }
+            if (!updated) {
+                pools.add(pool);
+            }
             Config.get().setPoolStore(pools);
             JoinstrPool.savePoolsFile(Storage.getJoinstrPoolsFile().getPath());
-
-            this.pool = poolWithCredentials;
 
             try {
                 if (credentialsListener != null) {
