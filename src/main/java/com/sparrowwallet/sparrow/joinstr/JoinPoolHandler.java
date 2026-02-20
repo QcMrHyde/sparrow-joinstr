@@ -100,8 +100,21 @@ public class JoinPoolHandler {
 
             Platform.runLater(() -> statusCallback.accept("Credentials received"));
 
+            long feeRate = 1;
+            if (credentials.containsKey("fee_rate")) {
+                Object fr = credentials.get("fee_rate");
+                if (fr instanceof Number) {
+                    feeRate = ((Number) fr).longValue();
+                } else if (fr instanceof String) {
+                    try {
+                        feeRate = Long.parseLong((String) fr);
+                    } catch (NumberFormatException e) {
+                    }
+                }
+            }
+
             // Use CoinjoinHandler for the rest of the flow
-            startCoinjoinFlow();
+            startCoinjoinFlow(feeRate);
 
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
@@ -113,7 +126,7 @@ public class JoinPoolHandler {
     /**
      * Start the coinjoin flow using CoinjoinHandler
      */
-    private void startCoinjoinFlow() {
+    private void startCoinjoinFlow(long feeRate) {
         try {
             Map<com.sparrowwallet.drongo.wallet.Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
             if (openWallets.isEmpty()) {
@@ -129,6 +142,7 @@ public class JoinPoolHandler {
             Address myOutputAddress = freshEntry.getAddress();
 
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, statusCallback);
+            coinjoinHandler.setFeeRate(feeRate);
 
             final com.sparrowwallet.drongo.wallet.Wallet walletRef = wallet;
             coinjoinHandler.setOnReadyForInputCallback(() -> {

@@ -41,7 +41,7 @@ public class CoinjoinHandler {
     private final String relay;
     private final int numPeers;
     private final long poolAmountSats;
-    private final long feeRate;
+    private long feeRate;
     private final Consumer<String> statusCallback;
 
     private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
@@ -69,8 +69,10 @@ public class CoinjoinHandler {
 
         String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
         this.poolAmountSats = (long) (Double.parseDouble(denomStr) * 100_000_000);
+    }
 
-        this.feeRate = 1;
+    public void setFeeRate(long feeRate) {
+        this.feeRate = feeRate;
     }
 
     /**
@@ -163,13 +165,49 @@ public class CoinjoinHandler {
      * Start input phase - create and sign PSBT with selected UTXO.
      */
     public void startInputPhase(BlockTransactionHashIndex selectedUtxo, WalletNode utxoNode) {
-        logger.info("=== COINJOIN INPUT PHASE v2 START ===");
         logger.info("UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() +
                 ", value=" + selectedUtxo.getValue() + " sats");
+
+        long value = selectedUtxo.getValue();
+        long minAllowed = poolAmountSats + 500;
+        long maxAllowed = poolAmountSats + 5000;
+        if (value < minAllowed || value > maxAllowed) {
+            Platform.runLater(() -> {
+                com.sparrowwallet.sparrow.AppServices.showErrorDialog("Invalid UTXO",
+                        "The selected UTXO has a value of " + value + " sats, which is outside the allowed range of "
+                                + minAllowed + " to " + maxAllowed + " sats.\n\nPlease select a different UTXO.");
+                if (onReadyForInputCallback != null) {
+                    onReadyForInputCallback.run();
+                }
+            });
+            return;
+        }
+
+        com.sparrowwallet.drongo.SecureString password = null;
+        if (wallet.isEncrypted()) {
+            com.sparrowwallet.sparrow.control.WalletPasswordDialog dlg = new com.sparrowwallet.sparrow.control.WalletPasswordDialog(
+                    wallet.getMasterName(),
+                    com.sparrowwallet.sparrow.control.WalletPasswordDialog.PasswordRequirement.LOAD);
+            Optional<com.sparrowwallet.drongo.SecureString> optPassword = dlg.showAndWait();
+            if (optPassword.isPresent()) {
+                password = optPassword.get();
+            } else {
+                updateStatus("Error: Check logs");
+                logger.severe("Password required for encrypted wallet");
+                return;
+            }
+        }
+        final com.sparrowwallet.drongo.SecureString finalPassword = password;
 
         Task<Void> task = new Task<>() {
             @Override
             protected Void call() throws Exception {
+                Wallet signingWallet = wallet;
+                if (wallet.isEncrypted() && finalPassword != null) {
+                    signingWallet = wallet.copy();
+                    signingWallet.decrypt(finalPassword);
+                }
+
                 try {
                     PSBT psbt = createCoinjoinPSBT(selectedUtxo, utxoNode);
                     if (psbt == null) {
@@ -177,7 +215,16 @@ public class CoinjoinHandler {
                         return null;
                     }
 
-                    signPSBT(psbt, selectedUtxo, utxoNode);
+                    if (!validateOutputs(psbt.getTransaction())) {
+                        updateStatus("Error: Check logs");
+                        return null;
+                    }
+
+                    signPSBT(psbt, selectedUtxo, utxoNode, signingWallet);
+
+                    if (signingWallet != wallet) {
+                        signingWallet.clearPrivate();
+                    }
 
                     PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
                     logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
@@ -255,21 +302,39 @@ public class CoinjoinHandler {
         }
     }
 
-    private void signPSBT(PSBT psbt, BlockTransactionHashIndex utxo, WalletNode utxoNode) {
+    private boolean validateOutputs(Transaction tx) {
+        long estimatedTxSize = 150L * numPeers;
+        long totalFee = feeRate * estimatedTxSize;
+        long feePerOutput = totalFee / numPeers;
+        long expectedOutputAmount = poolAmountSats - feePerOutput;
+
+        boolean ourOutputFound = false;
+
+        for (TransactionOutput output : tx.getOutputs()) {
+            try {
+                Address outputAddr = output.getScript().getToAddress();
+                if (outputAddr.toString().equals(myOutputAddress)) {
+                    if (output.getValue() != expectedOutputAmount) {
+                        logger.severe("Our output has incorrect amount: " + output.getValue() + " vs expected "
+                                + expectedOutputAmount);
+                        return false;
+                    }
+                    ourOutputFound = true;
+                }
+            } catch (Exception e) {
+            }
+        }
+
+        if (!ourOutputFound) {
+            logger.severe("Our output address not found in transaction outputs");
+            return false;
+        }
+        return true;
+    }
+
+    private void signPSBT(PSBT psbt, BlockTransactionHashIndex utxo, WalletNode utxoNode, Wallet signingWallet) {
         try {
-            if (wallet == null || !wallet.isValid() || wallet.getKeystores().isEmpty()) {
-                logger.severe("No valid wallet available for signing");
-                updateStatus("Error: Check logs");
-                return;
-            }
-
-            if (utxoNode == null) {
-                logger.severe("No private key available for signing");
-                updateStatus("Error: Check logs");
-                return;
-            }
-
-            com.sparrowwallet.drongo.wallet.Keystore keystore = wallet.getKeystores().get(0);
+            com.sparrowwallet.drongo.wallet.Keystore keystore = signingWallet.getKeystores().get(0);
             if (!keystore.hasPrivateKey()) {
                 logger.warning("Hardware wallet detected - signing not yet implemented for hardware wallets");
                 updateStatus("Error: Check logs");
@@ -277,11 +342,6 @@ public class CoinjoinHandler {
             }
 
             logger.info("Signing PSBT with : " + utxoNode.getDerivationPath());
-
-            if (wallet.isEncrypted()) {
-                logger.warning("Wallet is encrypted - signing may require password dialog");
-                // TODO: show WalletPasswordDialog
-            }
 
             com.sparrowwallet.drongo.crypto.ECKey privateKey = keystore.getKey(utxoNode);
 
@@ -520,25 +580,14 @@ public class CoinjoinHandler {
 
             Transaction finalTx = combinedPsbt.extractTransaction();
 
-            long totalOutputValue = 0;
-            boolean ourOutputFound = false;
-
-            for (TransactionOutput output : finalTx.getOutputs()) {
-                totalOutputValue += output.getValue();
-                try {
-                    Address outputAddr = output.getScript().getToAddress();
-                    if (outputAddr.toString().equals(myOutputAddress)) {
-                        ourOutputFound = true;
-                        logger.info("Found our output: " + myOutputAddress + " with value " + output.getValue());
-                    }
-                } catch (Exception e) {
-                }
-            }
-
-            if (!ourOutputFound) {
-                logger.severe("Our output address not found in final transaction!");
+            if (!validateOutputs(finalTx)) {
                 updateStatus("Error: Check logs");
                 return;
+            }
+
+            long totalOutputValue = 0;
+            for (TransactionOutput output : finalTx.getOutputs()) {
+                totalOutputValue += output.getValue();
             }
 
             long fee = totalInputValue - totalOutputValue;
