@@ -170,6 +170,7 @@ public class NewPoolController extends JoinstrFormController {
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, status -> {
                 javafx.application.Platform.runLater(() -> pool.setStatus(status));
             });
+            coinjoinHandler.setFeeRate(1);
 
             coinjoinHandler.setOnReadyForInputCallback(() -> {
                 showUtxoSelectionDialog(wallet);
