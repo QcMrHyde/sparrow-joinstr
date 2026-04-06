@@ -14,6 +14,7 @@ import com.sparrowwallet.drongo.wallet.BlockTransactionHashIndex;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.drongo.wallet.WalletNode;
 import com.sparrowwallet.sparrow.AppServices;
+import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.net.ElectrumServer;
 import javafx.application.Platform;
@@ -30,6 +31,7 @@ import com.sparrowwallet.sparrow.net.TorUtils;
 import org.bouncycastle.util.encoders.Base64;
 
 import java.math.BigDecimal;
+import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -721,6 +723,15 @@ public class CoinjoinHandler {
 
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
+                try {
+                    JoinstrHistoryEntry entry = new JoinstrHistoryEntry(tx.getTxId().toString(), poolRelay, poolAmountSats, Instant.now().getEpochSecond());
+                    ArrayList<JoinstrHistoryEntry> history = Config.get().getHistoryStore();
+                    history.add(entry);
+                    Config.get().setHistoryStore(history);
+                    JoinstrHistoryEntry.saveHistoryFile(Storage.getJoinstrHistoryFile().getPath());
+                } catch (Exception e) {
+                    logger.warning("Failed to save history: " + e.getMessage());
+                }
                 updateStatus("Complete");
                 pool.setStatus("Complete");
 
