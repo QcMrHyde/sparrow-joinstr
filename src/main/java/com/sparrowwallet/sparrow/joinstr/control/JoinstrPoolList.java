@@ -4,6 +4,10 @@ import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
 import javafx.beans.property.SimpleStringProperty;
+import com.sparrowwallet.sparrow.AppServices;
+import com.sparrowwallet.sparrow.net.TorUtils;
+import nostr.client.Client;
+import nostr.context.impl.DefaultRequestContext;
 import nostr.event.Kind;
 import nostr.id.Identity;
 import nostr.event.BaseTag;
@@ -182,45 +186,69 @@ public class JoinstrPoolList extends VBox {
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
                             qrDialog.showAndWait();
 
-                            PublicKey poolPubKey = new PublicKey(pool.getPubkey());
-                            String requestContent = "{\"type\": \"join_pool\"}";
-                            List<BaseTag> tags = new ArrayList<>();
-                            tags.add(new PubKeyTag(poolPubKey)); // Send to pool creator's pubkey
-
-                            NIP04 nip04 = new NIP04(identity, poolPubKey); // Use pool's pubkey
-                            String encryptedContent = nip04.encrypt(identity, requestContent, poolPubKey);
-
-                            GenericEvent encrypted_event = new GenericEvent(
-                                    identity.getPublicKey(),
-                                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
-                                    tags,
-                                    encryptedContent);
-
-                            nip04.setEvent(encrypted_event);
-                            nip04.sign();
-                            nip04.send(Map.of("default", pool.getRelay()));
-
-                            Logger.getLogger(JoinstrPoolList.class.getName())
-                                    .info("Join request sent. Event ID:: " + encrypted_event.getId());
-                            joinButton.setDisable(true);
-
-                            java.util.ArrayList<JoinstrPool> pools = com.sparrowwallet.sparrow.io.Config.get()
-                                    .getPoolStore();
-                            if (pools.stream().noneMatch(p -> p.getPubkey().equals(pool.getPubkey()))) {
-                                pools.add(pool);
-                                com.sparrowwallet.sparrow.io.Config.get().setPoolStore(pools);
+                            new Thread(() -> {
                                 try {
-                                    JoinstrPool.savePoolsFile(
-                                            com.sparrowwallet.sparrow.io.Storage.getJoinstrPoolsFile().getPath());
-                                } catch (Exception e) {
+                                    if(AppServices.isTorRunning()) {
+                                        Client.getInstance().disconnect();
+                                        TorUtils.changeIdentity(AppServices.getTorProxy());
+                                        TorUtils.logTorIp();
+                                    }
+
+                                    PublicKey poolPubKey = new PublicKey(pool.getPubkey());
+                                    String requestContent = "{\"type\": \"join_pool\"}";
+                                    List<BaseTag> tags = new ArrayList<>();
+                                    tags.add(new PubKeyTag(poolPubKey)); // Send to pool creator's pubkey
+
+                                    NIP04 nip04 = new NIP04(identity, poolPubKey); // Use pool's pubkey
+                                    String encryptedContent = nip04.encrypt(identity, requestContent, poolPubKey);
+
+                                    GenericEvent encrypted_event = new GenericEvent(
+                                            identity.getPublicKey(),
+                                            Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
+                                            tags,
+                                            encryptedContent);
+
+                                    nip04.setEvent(encrypted_event);
+                                    nip04.sign();
+
+                                    if(AppServices.isTorRunning()) {
+                                        DefaultRequestContext context = new DefaultRequestContext();
+                                        context.setPrivateKey(identity.getPrivateKey().getRawData());
+                                        context.setRelays(Map.of("default", pool.getRelay()));
+                                        Client.getInstance().connect(context);
+                                    }
+
+                                    nip04.send(Map.of("default", pool.getRelay()));
+
+                                    Logger.getLogger(JoinstrPoolList.class.getName())
+                                            .info("Join request sent. Event ID:: " + encrypted_event.getId());
+
+                                    javafx.application.Platform.runLater(() -> {
+                                        joinButton.setDisable(true);
+
+                                        java.util.ArrayList<JoinstrPool> pools = com.sparrowwallet.sparrow.io.Config.get()
+                                                .getPoolStore();
+                                        if(pools.stream().noneMatch(p -> p.getPubkey().equals(pool.getPubkey()))) {
+                                            pools.add(pool);
+                                            com.sparrowwallet.sparrow.io.Config.get().setPoolStore(pools);
+                                            try {
+                                                JoinstrPool.savePoolsFile(
+                                                        com.sparrowwallet.sparrow.io.Storage.getJoinstrPoolsFile().getPath());
+                                            } catch(Exception e) {
+                                                // Ignore
+                                            }
+                                        }
+
+                                        if(onJoinCallback != null) {
+                                            onJoinCallback.run();
+                                        }
+
+                                        pool.startListeningForCredentials(identity);
+                                    });
+                                } catch(Exception e) {
+                                    Logger.getLogger(JoinstrPoolList.class.getName()).severe("Error joining pool: " + e.getMessage());
                                 }
-                            }
-
-                            if (onJoinCallback != null) {
-                                javafx.application.Platform.runLater(onJoinCallback);
-                            }
-
-                            pool.startListeningForCredentials(identity);
+                            }).start();
 
                         });
                     }

@@ -14,6 +14,10 @@ import com.sparrowwallet.sparrow.wallet.WalletForm;
 import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.EventManager;
+import com.sparrowwallet.sparrow.AppServices;
+import com.sparrowwallet.sparrow.net.TorUtils;
+import nostr.client.Client;
+import nostr.context.impl.DefaultRequestContext;
 
 import java.time.Instant;
 import java.util.ArrayList;
@@ -52,8 +56,12 @@ public class NostrPublisher implements AutoCloseable {
         }
 
         Identity poolIdentity;
-
         try {
+            if (AppServices.isTorRunning()) {
+                Client.getInstance().disconnect();
+                TorUtils.changeIdentity(AppServices.getTorProxy());
+            }
+
             logger.info("Public key: " + SENDER.getPublicKey().toString());
 
             poolIdentity = Identity.generateRandomIdentity();
@@ -93,6 +101,13 @@ public class NostrPublisher implements AutoCloseable {
 
             nip01.setEvent(event);
             nip01.sign();
+
+            if (AppServices.isTorRunning()) {
+                DefaultRequestContext context = new DefaultRequestContext();
+                context.setPrivateKey(SENDER.getPrivateKey().getRawData());
+                context.setRelays(RELAYS);
+                Client.getInstance().connect(context);
+            }
 
             nip01.send(RELAYS);
 
