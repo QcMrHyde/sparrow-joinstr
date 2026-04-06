@@ -46,8 +46,9 @@ public class JoinPoolHandler {
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
-            if (decryptedMessage.contains("\"id\"") && decryptedMessage.contains("\"private_key\"")) {
-                handleCredentialsReceived(decryptedMessage);
+            JoinstrMessage message = JoinstrMessage.fromJson(decryptedMessage);
+            if (message.getPrivateKey() != null) {
+                handleCredentialsReceived(message);
             }
         });
     }
@@ -57,19 +58,14 @@ public class JoinPoolHandler {
      */
     private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
 
-    private void handleCredentialsReceived(String credentialsJson) {
+    private void handleCredentialsReceived(JoinstrMessage message) {
         if (!credentialsReceived.compareAndSet(false, true)) {
             logger.warning("Credentials already received, ignoring duplicate message");
             return;
         }
 
         try {
-            logger.info("Received credentials: " + credentialsJson);
-
-            Gson gson = new Gson();
-            Map<String, Object> credentials = gson.fromJson(credentialsJson, Map.class);
-
-            String poolPrivateKey = credentials.get("private_key").toString();
+            String poolPrivateKey = message.getPrivateKey();
             this.poolPrivateKeyString = poolPrivateKey;
             poolIdentity = Identity.create(poolPrivateKey);
 
@@ -101,16 +97,8 @@ public class JoinPoolHandler {
             Platform.runLater(() -> statusCallback.accept("Credentials received"));
 
             long feeRate = 1;
-            if (credentials.containsKey("fee_rate")) {
-                Object fr = credentials.get("fee_rate");
-                if (fr instanceof Number) {
-                    feeRate = ((Number) fr).longValue();
-                } else if (fr instanceof String) {
-                    try {
-                        feeRate = Long.parseLong((String) fr);
-                    } catch (NumberFormatException e) {
-                    }
-                }
+            if (message.getFeeRate() != null) {
+                feeRate = message.getFeeRate();
             }
 
             // Use CoinjoinHandler for the rest of the flow
