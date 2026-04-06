@@ -3,6 +3,8 @@ package com.sparrowwallet.sparrow.joinstr;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.sparrowwallet.sparrow.io.Config;
+import com.sparrowwallet.sparrow.AppServices;
+import com.sparrowwallet.sparrow.net.TorUtils;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrInfoPane;
 import com.sparrowwallet.sparrow.joinstr.control.JoinstrPoolList;
 import javafx.application.Platform;
@@ -203,6 +205,11 @@ public class OtherPoolsController extends JoinstrFormController {
                 context.setRelays(Map.of("default", DEFAULT_RELAY));
 
                 try {
+                    if (AppServices.isTorRunning()) {
+                        Client.getInstance().disconnect();
+                        TorUtils.changeIdentity(AppServices.getTorProxy());
+                    }
+
                     client.connect(context);
                     client.send(reqMessage);
 
