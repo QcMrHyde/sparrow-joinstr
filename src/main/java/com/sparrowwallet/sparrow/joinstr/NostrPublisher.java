@@ -60,6 +60,7 @@ public class NostrPublisher implements AutoCloseable {
             if (AppServices.isTorRunning()) {
                 Client.getInstance().disconnect();
                 TorUtils.changeIdentity(AppServices.getTorProxy());
+                TorUtils.logTorIp();
             }
 
             logger.info("Public key: " + SENDER.getPublicKey().toString());

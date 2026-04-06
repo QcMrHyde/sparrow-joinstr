@@ -110,6 +110,7 @@ public class CoinjoinHandler {
                 if (AppServices.isTorRunning()) {
                     Client.getInstance().disconnect();
                     TorUtils.changeIdentity(AppServices.getTorProxy());
+                    TorUtils.logTorIp();
                 }
 
                 JoinstrMessage message = new JoinstrMessage();
@@ -443,6 +444,7 @@ public class CoinjoinHandler {
             if (AppServices.isTorRunning()) {
                 Client.getInstance().disconnect();
                 TorUtils.changeIdentity(AppServices.getTorProxy());
+                TorUtils.logTorIp();
             }
 
             JoinstrMessage message = new JoinstrMessage();

@@ -151,6 +151,7 @@ public class NostrListener implements AutoCloseable {
             if (AppServices.isTorRunning()) {
                 Client.getInstance().disconnect();
                 TorUtils.changeIdentity(AppServices.getTorProxy());
+                TorUtils.logTorIp();
             }
 
             credentialsMap.put("relay", poolCredentials.get("relay"));
@@ -189,6 +190,7 @@ public class NostrListener implements AutoCloseable {
             if (AppServices.isTorRunning()) {
                 Client.getInstance().disconnect();
                 TorUtils.changeIdentity(AppServices.getTorProxy());
+                TorUtils.logTorIp();
             }
 
             client = Client.getInstance();
