@@ -26,6 +26,7 @@ import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
 import org.bouncycastle.util.encoders.Base64;
 
+import java.math.BigDecimal;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -69,7 +70,8 @@ public class CoinjoinHandler {
         this.numPeers = pool.getParsedPeers();
 
         String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
-        this.poolAmountSats = (long) (Double.parseDouble(denomStr) * 100_000_000);
+        BigDecimal denom = new BigDecimal(denomStr);
+        this.poolAmountSats = denom.movePointRight(8).longValueExact();
     }
 
     public void setFeeRate(long feeRate) {
@@ -102,7 +104,10 @@ public class CoinjoinHandler {
     private void sendOutputToPool(String address) {
         executorService.submit(() -> {
             try {
-                String outputContent = String.format("{\"type\":\"output\",\"address\":\"%s\"}", address);
+                JoinstrMessage message = new JoinstrMessage();
+                message.setType("output");
+                message.setAddress(address);
+                String outputContent = message.toJson();
 
                 List<BaseTag> tags = new ArrayList<>();
                 tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
@@ -419,7 +424,10 @@ public class CoinjoinHandler {
 
     private void sendInputToPool(String psbtBase64) {
         try {
-            String inputContent = String.format("{\"type\":\"input\",\"psbt\":\"%s\"}", psbtBase64);
+            JoinstrMessage message = new JoinstrMessage();
+            message.setType("input");
+            message.setPsbt(psbtBase64);
+            String inputContent = message.toJson();
 
             List<BaseTag> tags = new ArrayList<>();
             tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
@@ -459,15 +467,28 @@ public class CoinjoinHandler {
                     }
                 }
 
+                long estimatedTxSize = 150L * numPeers;
+                long totalFee = feeRate * estimatedTxSize;
+                long feePerOutput = (numPeers > 0) ? totalFee / numPeers : 0;
+                long expectedOutputAmount = poolAmountSats - feePerOutput;
+
                 Transaction tx = psbt.getTransaction();
                 for (TransactionOutput output : tx.getOutputs()) {
                     try {
                         Address outputAddr = output.getScript().getToAddress();
-                        if (!outputAddresses.contains(outputAddr.toString())) {
-                            logger.warning("Rejecting PSBT with output address: " + outputAddr);
+                        String addrStr = outputAddr.toString();
+                        if (!outputAddresses.contains(addrStr)) {
+                            logger.warning("Rejecting PSBT with incorrect output address: " + outputAddr);
+                            return;
+                        }
+
+                        if (output.getValue() != expectedOutputAmount) {
+                            logger.warning("Rejecting PSBT with incorrect output amount for " + addrStr + ": "
+                                    + output.getValue() + " vs expected " + expectedOutputAmount);
                             return;
                         }
                     } catch (Exception e) {
+                        // Not an address output, continue
                     }
                 }
 

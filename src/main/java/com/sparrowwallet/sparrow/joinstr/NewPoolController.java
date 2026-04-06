@@ -250,7 +250,7 @@ public class NewPoolController extends JoinstrFormController {
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 
         listener.startListening(decryptedMessage -> {
-            logger.info("Received message: " + decryptedMessage);
+            logger.info("Received message for credential sharing");
         });
     }
 }

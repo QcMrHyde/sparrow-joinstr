@@ -58,6 +58,11 @@ public class JoinstrMessage {
         this.fee_rate = fee_rate;
     }
 
+    public String toJson() {
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        return gson.toJson(this);
+    }
+
     public static JoinstrMessage fromJson(String json) {
         com.google.gson.Gson gson = new com.google.gson.Gson();
         return gson.fromJson(json, JoinstrMessage.class);
