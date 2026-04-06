@@ -19,11 +19,14 @@ import com.sparrowwallet.sparrow.net.ElectrumServer;
 import javafx.application.Platform;
 import javafx.concurrent.Task;
 import nostr.api.NIP04;
+import nostr.client.Client;
+import nostr.context.impl.DefaultRequestContext;
 import nostr.event.BaseTag;
 import nostr.event.Kind;
 import nostr.event.impl.GenericEvent;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
+import com.sparrowwallet.sparrow.net.TorUtils;
 import org.bouncycastle.util.encoders.Base64;
 
 import java.math.BigDecimal;
@@ -104,6 +107,11 @@ public class CoinjoinHandler {
     private void sendOutputToPool(String address) {
         executorService.submit(() -> {
             try {
+                if (AppServices.isTorRunning()) {
+                    Client.getInstance().disconnect();
+                    TorUtils.changeIdentity(AppServices.getTorProxy());
+                }
+
                 JoinstrMessage message = new JoinstrMessage();
                 message.setType("output");
                 message.setAddress(address);
@@ -123,6 +131,14 @@ public class CoinjoinHandler {
 
                 nip04.setEvent(outputEvent);
                 nip04.sign();
+
+                if (AppServices.isTorRunning()) {
+                    DefaultRequestContext context = new DefaultRequestContext();
+                    context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
+                    context.setRelays(Map.of("default", relay));
+                    Client.getInstance().connect(context);
+                }
+
                 nip04.send(Map.of("default", relay));
 
                 logger.info("Output registered: " + address);
@@ -424,6 +440,11 @@ public class CoinjoinHandler {
 
     private void sendInputToPool(String psbtBase64) {
         try {
+            if (AppServices.isTorRunning()) {
+                Client.getInstance().disconnect();
+                TorUtils.changeIdentity(AppServices.getTorProxy());
+            }
+
             JoinstrMessage message = new JoinstrMessage();
             message.setType("input");
             message.setPsbt(psbtBase64);
@@ -443,6 +464,14 @@ public class CoinjoinHandler {
 
             nip04.setEvent(inputEvent);
             nip04.sign();
+
+            if (AppServices.isTorRunning()) {
+                DefaultRequestContext context = new DefaultRequestContext();
+                context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
+                context.setRelays(Map.of("default", relay));
+                Client.getInstance().connect(context);
+            }
+
             nip04.send(Map.of("default", relay));
 
             logger.info("Signed input sent to pool");
@@ -460,7 +489,7 @@ public class CoinjoinHandler {
                 PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
 
                 for (PSBTInput input : psbt.getPsbtInputs()) {
-                    String outpoint = input.getOutpoint().toString();
+                    String outpoint = input.getInput().getOutpoint().toString();
                     if (allInputs.contains(outpoint)) {
                         logger.warning("Rejecting duplicate input: " + outpoint);
                         return;
@@ -494,7 +523,7 @@ public class CoinjoinHandler {
 
                 inputPSBTs.add(psbtBase64);
                 for (PSBTInput input : psbt.getPsbtInputs()) {
-                    allInputs.add(input.getOutpoint().toString());
+                    allInputs.add(input.getInput().getOutpoint().toString());
                 }
 
                 logger.info("Received valid input " + inputPSBTs.size() + "/" + numPeers);

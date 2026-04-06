@@ -113,11 +113,19 @@ public class Tor implements Closeable {
 
     public void changeIdentity() {
         if(instance != null) {
+            java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
             instance.enqueue(TorCmd.Signal.NewNym.INSTANCE, throwable -> {
                 log.warn("Failed to signal newnym", throwable);
+                latch.countDown();
             }, _ -> {
                 log.info("Signalled newnym for new Tor circuit");
+                latch.countDown();
             });
+            try {
+                latch.await(3, java.util.concurrent.TimeUnit.SECONDS);
+            } catch(InterruptedException e) {
+                // Ignore
+            }
         }
     }
 

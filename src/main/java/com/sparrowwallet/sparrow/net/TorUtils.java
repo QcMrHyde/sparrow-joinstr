@@ -81,6 +81,13 @@ public class TorUtils {
     private static void writeNewNym(Socket socket) throws IOException {
         log.debug("Sending NEWNYM to " + socket);
         socket.getOutputStream().write("SIGNAL NEWNYM\r\n".getBytes());
+        BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+        String line = reader.readLine();
+        if(line == null || !TOR_OK.matcher(line).matches()) {
+            log.warn("NEWNYM failed: " + line);
+        } else {
+            log.info("NEWNYM acknowledged by Tor control port");
+        }
     }
 
     private static class TorAuthenticationException extends Exception {
