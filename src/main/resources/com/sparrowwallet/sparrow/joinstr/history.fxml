@@ -9,7 +9,7 @@
         <Insets top="30" right="30" bottom="30" left="30"/>
     </padding>
     <center>
-        <VBox maxWidth="Infinity" fx:id="contentVBox">
+        <VBox maxWidth="Infinity" HBox.hgrow="ALWAYS" fx:id="contentVBox">
             <GridPane maxWidth="Infinity" HBox.hgrow="ALWAYS" hgap="10.0" vgap="10.0">
                 <columnConstraints>
                     <ColumnConstraints percentWidth="80" />
@@ -18,8 +18,9 @@
                 <children>
                     <VBox maxWidth="Infinity" HBox.hgrow="ALWAYS" GridPane.rowIndex="0" GridPane.columnIndex="0">
                         <Label styleClass="title">History</Label>
+                        <Label styleClass="sub-title">Completed coinjoins</Label>
                     </VBox>
-                    <TextField GridPane.rowIndex="0" GridPane.columnIndex="1" fx:id="searchTextField" promptText="Search pools..." onAction="#handleSearchButton" />
+                    <TextField GridPane.rowIndex="0" GridPane.columnIndex="1" fx:id="searchTextField" promptText="" onAction="#handleSearchButton" />
                 </children>
             </GridPane>
         </VBox>
