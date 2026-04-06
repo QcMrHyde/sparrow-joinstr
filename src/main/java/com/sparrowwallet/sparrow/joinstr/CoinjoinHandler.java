@@ -46,6 +46,7 @@ public class CoinjoinHandler {
 
     private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
     private final List<String> inputPSBTs = new CopyOnWriteArrayList<>();
+    private final Set<String> allInputs = Collections.synchronizedSet(new HashSet<>());
     private String myOutputAddress;
     private String myPsbtBase64;
 
@@ -79,6 +80,14 @@ public class CoinjoinHandler {
      * Start the output phase - register our output and listen for others.
      */
     public void startOutputPhase(String myOutputAddress) {
+        try {
+            Address.fromString(myOutputAddress);
+        } catch (Exception e) {
+            logger.severe("Invalid address: " + myOutputAddress);
+            updateStatus("Error: Invalid address");
+            return;
+        }
+
         this.myOutputAddress = myOutputAddress;
         outputAddresses.add(myOutputAddress);
         pool.setConnectedPeers(outputAddresses.size());
@@ -126,27 +135,34 @@ public class CoinjoinHandler {
 
     private void handleDecryptedMessage(String decryptedMessage) {
         try {
-            if (decryptedMessage.contains("\"type\":\"output\"") || decryptedMessage.contains("\"type\": \"output\"")) {
-                handleOutputReceived(decryptedMessage);
-            } else if (decryptedMessage.contains("\"type\":\"input\"")
-                    || decryptedMessage.contains("\"type\": \"input\"")) {
-                handleInputReceived(decryptedMessage);
+            JoinstrMessage message = JoinstrMessage.fromJson(decryptedMessage);
+            String type = message.getType();
+
+            if ("output".equals(type)) {
+                handleOutputReceived(message);
+            } else if ("input".equals(type)) {
+                handleInputReceived(message);
             }
         } catch (Exception e) {
             logger.severe("Error handling message: " + e.getMessage());
         }
     }
 
-    private void handleOutputReceived(String decryptedMessage) {
+    private void handleOutputReceived(JoinstrMessage message) {
         try {
-            Gson gson = new Gson();
-            Map<String, String> outputData = gson.fromJson(decryptedMessage, Map.class);
-            String address = outputData.get("address");
+            String addressStr = message.getAddress();
 
-            if (address != null && !outputAddresses.contains(address)) {
-                outputAddresses.add(address);
+            if (addressStr != null && !outputAddresses.contains(addressStr)) {
+                try {
+                    Address.fromString(addressStr);
+                } catch (Exception e) {
+                    logger.warning("Received invalid output address: " + addressStr);
+                    return;
+                }
+
+                outputAddresses.add(addressStr);
                 pool.setConnectedPeers(outputAddresses.size());
-                logger.info("Received output " + outputAddresses.size() + "/" + numPeers + ": " + address);
+                logger.info("Received output " + outputAddresses.size() + "/" + numPeers + ": " + addressStr);
 
                 if (outputAddresses.size() == numPeers) {
                     logger.info("All outputs registered, ready for input registration");
@@ -222,10 +238,6 @@ public class CoinjoinHandler {
 
                     signPSBT(psbt, selectedUtxo, utxoNode, signingWallet);
 
-                    if (signingWallet != wallet) {
-                        signingWallet.clearPrivate();
-                    }
-
                     PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
                     logger.info("PSBT after signing - isSigned: " + psbtInput.isSigned() +
                             ", isFinalized: " + psbtInput.isFinalized() +
@@ -245,10 +257,10 @@ public class CoinjoinHandler {
                     logger.info("Sending signed PSBT to pool, size: " + psbtBytes.length + " bytes");
                     sendInputToPool(myPsbtBase64);
 
-                } catch (Exception e) {
-                    logger.severe("Error in input phase: " + e.getMessage());
-                    e.printStackTrace();
-                    updateStatus("Error: Check logs");
+                } finally {
+                    if (signingWallet != wallet) {
+                        signingWallet.clearPrivate();
+                    }
                 }
                 return null;
             }
@@ -303,32 +315,44 @@ public class CoinjoinHandler {
     }
 
     private boolean validateOutputs(Transaction tx) {
+        return validateOutputs(tx, List.of(myOutputAddress));
+    }
+
+    private boolean validateOutputs(Transaction tx, List<String> expectedAddresses) {
         long estimatedTxSize = 150L * numPeers;
         long totalFee = feeRate * estimatedTxSize;
         long feePerOutput = totalFee / numPeers;
         long expectedOutputAmount = poolAmountSats - feePerOutput;
 
-        boolean ourOutputFound = false;
+        Set<String> foundAddresses = new HashSet<>();
 
         for (TransactionOutput output : tx.getOutputs()) {
             try {
                 Address outputAddr = output.getScript().getToAddress();
-                if (outputAddr.toString().equals(myOutputAddress)) {
+                String addrStr = outputAddr.toString();
+                if (expectedAddresses.contains(addrStr)) {
                     if (output.getValue() != expectedOutputAmount) {
-                        logger.severe("Our output has incorrect amount: " + output.getValue() + " vs expected "
-                                + expectedOutputAmount);
+                        logger.severe(
+                                "Output " + addrStr + " has incorrect amount: " + output.getValue() + " vs expected "
+                                        + expectedOutputAmount);
                         return false;
                     }
-                    ourOutputFound = true;
+                    foundAddresses.add(addrStr);
+                } else {
+                    logger.warning("Unrecognized output address in transaction: " + addrStr);
+                    return false;
                 }
             } catch (Exception e) {
+                logger.warning("Could not parse output address: " + e.getMessage());
             }
         }
 
-        if (!ourOutputFound) {
-            logger.severe("Our output address not found in transaction outputs");
+        if (foundAddresses.size() != expectedAddresses.size()) {
+            logger.severe("Missing output addresses. Found " + foundAddresses.size() + " vs expected "
+                    + expectedAddresses.size());
             return false;
         }
+
         return true;
     }
 
@@ -420,15 +444,39 @@ public class CoinjoinHandler {
         }
     }
 
-    private void handleInputReceived(String decryptedMessage) {
+    private void handleInputReceived(JoinstrMessage message) {
         try {
-            Gson gson = new Gson();
-            Map<String, String> inputData = gson.fromJson(decryptedMessage, Map.class);
-            String psbt = inputData.get("psbt");
+            String psbtBase64 = message.getPsbt();
 
-            if (psbt != null && !inputPSBTs.contains(psbt)) {
-                inputPSBTs.add(psbt);
-                logger.info("Received input " + inputPSBTs.size() + "/" + numPeers);
+            if (psbtBase64 != null && !inputPSBTs.contains(psbtBase64)) {
+                PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
+
+                for (PSBTInput input : psbt.getPsbtInputs()) {
+                    String outpoint = input.getOutpoint().toString();
+                    if (allInputs.contains(outpoint)) {
+                        logger.warning("Rejecting duplicate input: " + outpoint);
+                        return;
+                    }
+                }
+
+                Transaction tx = psbt.getTransaction();
+                for (TransactionOutput output : tx.getOutputs()) {
+                    try {
+                        Address outputAddr = output.getScript().getToAddress();
+                        if (!outputAddresses.contains(outputAddr.toString())) {
+                            logger.warning("Rejecting PSBT with output address: " + outputAddr);
+                            return;
+                        }
+                    } catch (Exception e) {
+                    }
+                }
+
+                inputPSBTs.add(psbtBase64);
+                for (PSBTInput input : psbt.getPsbtInputs()) {
+                    allInputs.add(input.getOutpoint().toString());
+                }
+
+                logger.info("Received valid input " + inputPSBTs.size() + "/" + numPeers);
 
                 if (inputPSBTs.size() == numPeers) {
                     logger.info("All inputs registered, finalizing coinjoin");
@@ -580,7 +628,7 @@ public class CoinjoinHandler {
 
             Transaction finalTx = combinedPsbt.extractTransaction();
 
-            if (!validateOutputs(finalTx)) {
+            if (!validateOutputs(finalTx, outputAddresses)) {
                 updateStatus("Error: Check logs");
                 return;
             }
