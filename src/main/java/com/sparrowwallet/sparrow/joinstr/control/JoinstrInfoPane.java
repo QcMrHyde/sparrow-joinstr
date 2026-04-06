@@ -14,6 +14,7 @@ public class JoinstrInfoPane extends VBox {
     private Label relayValueLabel;
     private Label pubkeyValueLabel;
     private Label denominationValueLabel;
+    private Label statusValueLabel;
 
     public JoinstrInfoPane() {
         if(Config.get().getTheme() == Theme.DARK) {
@@ -49,11 +50,16 @@ public class JoinstrInfoPane extends VBox {
         Label denominationLabel = new Label("Denomination:");
         denominationLabel.getStyleClass().add("text-grey");
         denominationValueLabel = new Label();
+ 
+        Label statusLabel = new Label("Status:");
+        statusLabel.getStyleClass().add("text-grey");
+        statusValueLabel = new Label();
 
         if(Config.get().getTheme() == Theme.DARK) {
             relayValueLabel.setStyle("-fx-text-fill: white;");
             pubkeyValueLabel.setStyle("-fx-text-fill: white;");
             denominationValueLabel.setStyle("-fx-text-fill: white;");
+            statusValueLabel.setStyle("-fx-text-fill: white;");
         }
 
         detailsGrid.add(relayLabel, 0, 0);
@@ -62,6 +68,8 @@ public class JoinstrInfoPane extends VBox {
         detailsGrid.add(pubkeyValueLabel, 1, 1);
         detailsGrid.add(denominationLabel, 0, 2);
         detailsGrid.add(denominationValueLabel, 1, 2);
+        detailsGrid.add(statusLabel, 0, 3);
+        detailsGrid.add(statusValueLabel, 1, 3);
 
         getChildren().add(detailsGrid);
     }
@@ -71,6 +79,7 @@ public class JoinstrInfoPane extends VBox {
             relayValueLabel.setText(pool.getRelay());
             pubkeyValueLabel.setText(pool.getPubkey());
             denominationValueLabel.setText(pool.getDenomination());
+            statusValueLabel.textProperty().bind(pool.statusProperty());
         } else {
             clearPoolInfo();
         }
@@ -80,5 +89,7 @@ public class JoinstrInfoPane extends VBox {
         relayValueLabel.setText("");
         pubkeyValueLabel.setText("");
         denominationValueLabel.setText("");
+        statusValueLabel.textProperty().unbind();
+        statusValueLabel.setText("");
     }
 }
