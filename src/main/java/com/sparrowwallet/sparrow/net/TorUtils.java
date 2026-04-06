@@ -12,33 +12,58 @@ import java.net.SocketTimeoutException;
 import java.nio.file.AccessDeniedException;
 import java.nio.file.FileSystemException;
 import java.nio.file.Files;
+import java.util.Map;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 public class TorUtils {
     private static final Logger log = LoggerFactory.getLogger(TorUtils.class);
     private static final Pattern TOR_OK = Pattern.compile("^2\\d{2}[ -]OK$");
-    private static final Pattern TOR_AUTH_METHODS = Pattern.compile("^2\\d{2}[ -]AUTH METHODS=(\\S+)\\s?(COOKIEFILE=\"?(.+?)\"?)?$");
+    private static final Pattern TOR_AUTH_METHODS = Pattern
+            .compile("^2\\d{2}[ -]AUTH METHODS=(\\S+)\\s?(COOKIEFILE=\"?(.+?)\"?)?$");
+    private static final String CHECK_TOR_IP_URL = "https://check.torproject.org/api/ip";
+
+    private static final java.util.concurrent.atomic.AtomicInteger IP_CHECK_COUNTER = new java.util.concurrent.atomic.AtomicInteger(0);
+
+    public static void logTorIp() {
+        if (AppServices.isTorRunning() && AppServices.isConnected()) {
+            Thread ipThread = new Thread(() -> {
+                try {
+                    Thread.sleep(3000);
+                    HttpClientService httpClientService = AppServices.getHttpClientService();
+                    Map<String, String> response = httpClientService.requestJson(CHECK_TOR_IP_URL, Map.class, null);
+                    if (response != null && response.containsKey("ip")) {
+                        log.info("IP: " + response.get("ip"));
+                    }
+                } catch (Exception e) {
+                    log.warn("Error checking IP: " + e.getMessage());
+                }
+            });
+            ipThread.setDaemon(true);
+            ipThread.setName("IPChecker-" + IP_CHECK_COUNTER.incrementAndGet());
+            ipThread.start();
+        }
+    }
 
     public static void changeIdentity(HostAndPort proxy) {
-        if(AppServices.isTorRunning()) {
+        if (AppServices.isTorRunning()) {
             Tor.getDefault().changeIdentity();
         } else {
             HostAndPort control = HostAndPort.fromParts(proxy.getHost(), proxy.getPort() + 1);
-            try(Socket socket = new Socket(control.getHost(), control.getPort())) {
+            try (Socket socket = new Socket(control.getHost(), control.getPort())) {
                 socket.setSoTimeout(1500);
-                if(authenticate(socket)) {
+                if (authenticate(socket)) {
                     writeNewNym(socket);
                 }
-            } catch(TorAuthenticationException e) {
+            } catch (TorAuthenticationException e) {
                 log.warn("Error authenticating to Tor at " + control + ", server returned " + e.getMessage());
-            } catch(SocketTimeoutException e) {
+            } catch (SocketTimeoutException e) {
                 log.warn("Timeout reading from " + control + ", is this a Tor ControlPort?");
-            } catch(AccessDeniedException e) {
+            } catch (AccessDeniedException e) {
                 log.warn("Permission denied reading Tor cookie file at " + e.getFile());
-            } catch(FileSystemException e) {
+            } catch (FileSystemException e) {
                 log.warn("Error reading Tor cookie file at " + e.getFile());
-            } catch(Exception e) {
+            } catch (Exception e) {
                 log.warn("Error connecting to " + control + ", no Tor ControlPort configured?");
             }
         }
@@ -49,20 +74,20 @@ public class TorUtils {
         BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
         String line;
         File cookieFile = null;
-        while((line = reader.readLine()) != null) {
+        while ((line = reader.readLine()) != null) {
             Matcher authMatcher = TOR_AUTH_METHODS.matcher(line);
-            if(authMatcher.matches()) {
+            if (authMatcher.matches()) {
                 String methods = authMatcher.group(1);
-                if(methods.contains("COOKIE") && !authMatcher.group(3).isEmpty()) {
+                if (methods.contains("COOKIE") && !authMatcher.group(3).isEmpty()) {
                     cookieFile = new File(authMatcher.group(3));
                 }
             }
-            if(TOR_OK.matcher(line).matches()) {
+            if (TOR_OK.matcher(line).matches()) {
                 break;
             }
         }
 
-        if(cookieFile != null && cookieFile.exists()) {
+        if (cookieFile != null && cookieFile.exists()) {
             byte[] cookieBytes = Files.readAllBytes(cookieFile.toPath());
             String authentication = "AUTHENTICATE " + Utils.bytesToHex(cookieBytes) + "\r\n";
             socket.getOutputStream().write(authentication.getBytes());
@@ -71,7 +96,7 @@ public class TorUtils {
         }
 
         line = reader.readLine();
-        if(TOR_OK.matcher(line).matches()) {
+        if (TOR_OK.matcher(line).matches()) {
             return true;
         } else {
             throw new TorAuthenticationException(line);
