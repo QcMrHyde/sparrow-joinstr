@@ -14,6 +14,8 @@ import nostr.event.impl.GenericEvent;
 import nostr.event.message.ReqMessage;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
+import com.sparrowwallet.sparrow.AppServices;
+import com.sparrowwallet.sparrow.net.TorUtils;
 
 import java.util.*;
 import java.util.concurrent.TimeoutException;
@@ -145,6 +147,12 @@ public class NostrListener implements AutoCloseable {
             credentialsMap.put("denomination", poolCredentials.get("denomination"));
             credentialsMap.put("peers", poolCredentials.get("peers"));
             credentialsMap.put("timeout", poolCredentials.get("timeout"));
+
+            if (AppServices.isTorRunning()) {
+                Client.getInstance().disconnect();
+                TorUtils.changeIdentity(AppServices.getTorProxy());
+            }
+
             credentialsMap.put("relay", poolCredentials.get("relay"));
             credentialsMap.put("private_key", poolCredentials.get("private_key"));
             credentialsMap.put("fee_rate", poolCredentials.get("fee_rate"));
@@ -178,6 +186,11 @@ public class NostrListener implements AutoCloseable {
 
     private void connectAndSubscribe() {
         try {
+            if (AppServices.isTorRunning()) {
+                Client.getInstance().disconnect();
+                TorUtils.changeIdentity(AppServices.getTorProxy());
+            }
+
             client = Client.getInstance();
             DefaultRequestContext context = new DefaultRequestContext();
             context.setPrivateKey(identity.getPrivateKey().getRawData());
