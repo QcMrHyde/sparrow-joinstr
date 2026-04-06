@@ -504,6 +504,17 @@ public class Storage {
         return joinstrPoolsFile;
     }
 
+    public static File getJoinstrHistoryFile() {
+        String filePath = getSparrowDir().getPath();
+
+        File joinstrHistoryFile = new File((isWindows() ? filePath + "\\" : filePath + "/") + "history.json");
+        if(!joinstrHistoryFile.exists()) {
+            createOwnerOnlyFile(joinstrHistoryFile);
+        }
+
+        return joinstrHistoryFile;
+    }
+
     public static File getCertificateFile(String host) {
         File certsDir = getCertsDir();
         File[] certs = certsDir.listFiles((dir, name) -> name.equals(host));

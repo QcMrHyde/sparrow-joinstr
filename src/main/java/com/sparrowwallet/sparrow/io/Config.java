@@ -94,6 +94,7 @@ public class Config {
     // Joinstr settings
     private String nostrRelay;
     private ArrayList<JoinstrPool> poolStore;
+    private ArrayList<JoinstrHistoryEntry> historyStore;
 
     // ================
 
@@ -771,6 +772,17 @@ public class Config {
 
     public void setPoolStore(ArrayList<JoinstrPool> pools) {
         this.poolStore = pools;
+        flush();
+    }
+
+    public ArrayList<JoinstrHistoryEntry> getHistoryStore() {
+        if(historyStore == null)
+            historyStore = new ArrayList<JoinstrHistoryEntry>();
+        return historyStore;
+    }
+
+    public void setHistoryStore(ArrayList<JoinstrHistoryEntry> entries) {
+        this.historyStore = entries;
         flush();
     }
 
