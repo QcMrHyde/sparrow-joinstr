@@ -61,6 +61,9 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
     public JoinstrController() { }
 
     public void initializeView() {
+        // Ensure Tor is running for Joinstr circuit isolation
+        AppServices.get().startTor();
+
         joinstrMenu.selectedToggleProperty().addListener((observable, oldValue, selectedToggle) -> {
             if(selectedToggle == null) {
                 if(oldValue != null)

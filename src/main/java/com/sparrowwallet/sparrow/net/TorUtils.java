@@ -33,8 +33,9 @@ public class TorUtils {
                     Thread.sleep(3000);
                     HttpClientService httpClientService = AppServices.getHttpClientService();
                     Map<String, String> response = httpClientService.requestJson(CHECK_TOR_IP_URL, Map.class, null);
-                    if (response != null && response.containsKey("ip")) {
-                        julLog.info("Tor IP: " + response.get("ip"));
+                    String ip = response != null ? response.getOrDefault("IP", response.get("ip")) : null;
+                    if (ip != null) {
+                        julLog.info("Tor IP: " + ip);
                     } else {
                         julLog.warning("Tor IP check returned empty response");
                     }
