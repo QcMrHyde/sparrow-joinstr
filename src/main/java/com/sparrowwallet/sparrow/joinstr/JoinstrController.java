@@ -2,6 +2,8 @@ package com.sparrowwallet.sparrow.joinstr;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.Theme;
 import com.sparrowwallet.sparrow.io.Config;
+import com.google.common.net.HostAndPort;
+import org.slf4j.LoggerFactory;
 
 import java.io.IOException;
 import java.net.URL;
@@ -25,6 +27,7 @@ import javafx.stage.Stage;
 public class JoinstrController extends JoinstrFormController implements IThreadExecutor {
 
     private static final Logger logger = Logger.getLogger(JoinstrController.class.getName());
+    private static final org.slf4j.Logger log = LoggerFactory.getLogger(JoinstrController.class);
 
     private Stage stage;
 
@@ -63,6 +66,8 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
     public void initializeView() {
         // Ensure Tor is running for Joinstr circuit isolation
         AppServices.get().startTor();
+        // Route nostr-java WebSocket connections through Tor SOCKS proxy
+        applyTorSocksProxy();
 
         joinstrMenu.selectedToggleProperty().addListener((observable, oldValue, selectedToggle) -> {
             if(selectedToggle == null) {
@@ -183,6 +188,36 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
         this.stage = stage;
     }
 
+    /**
+     * Sets JVM-wide SOCKS proxy properties so nostr-java WebSocket connections
+     * are routed through Tor. Polls until Tor is ready (up to 90s).
+     */
+    private void applyTorSocksProxy() {
+        Thread t = new Thread(() -> {
+            try {
+                int waited = 0;
+                while (!AppServices.isTorRunning() && waited < 90) {
+                    Thread.sleep(2000);
+                    waited += 2;
+                }
+                if (AppServices.isTorRunning()) {
+                    HostAndPort proxy = AppServices.getTorProxy();
+                    System.setProperty("socksProxyHost", proxy.getHost());
+                    System.setProperty("socksProxyPort", String.valueOf(proxy.getPort()));
+                    log.info("[Joinstr] Nostr connections routed through Tor SOCKS proxy {}:{}",
+                            proxy.getHost(), proxy.getPort());
+                } else {
+                    log.warn("[Joinstr] Tor not ready after 90s — nostr connections may not be over Tor");
+                }
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            }
+        });
+        t.setDaemon(true);
+        t.setName("TorProxyApplier");
+        t.start();
+    }
+
     @Override
     public void close() {
         try {
@@ -191,6 +226,10 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
                 formController.close();
             }
             controllerCache.clear();
+
+            // Clear the JVM SOCKS proxy so normal Sparrow traffic is unaffected
+            System.clearProperty("socksProxyHost");
+            System.clearProperty("socksProxyPort");
 
             shutdownThreads();
             stage.close();
