@@ -23,30 +23,49 @@ public class TorUtils {
             .compile("^2\\d{2}[ -]AUTH METHODS=(\\S+)\\s?(COOKIEFILE=\"?(.+?)\"?)?$");
     private static final String CHECK_TOR_IP_URL = "https://check.torproject.org/api/ip";
 
+    private static volatile long lastIpCheckMs = 0;
     private static final java.util.concurrent.atomic.AtomicInteger IP_CHECK_COUNTER = new java.util.concurrent.atomic.AtomicInteger(0);
 
     public static void logTorIp() {
-        if (AppServices.isTorRunning()) {
-            java.util.logging.Logger julLog = java.util.logging.Logger.getLogger("nostr.TorUtils");
-            Thread ipThread = new Thread(() -> {
-                try {
-                    Thread.sleep(3000);
-                    HttpClientService httpClientService = AppServices.getHttpClientService();
-                    Map<String, String> response = httpClientService.requestJson(CHECK_TOR_IP_URL, Map.class, null);
-                    String ip = response != null ? response.getOrDefault("IP", response.get("ip")) : null;
-                    if (ip != null) {
-                        julLog.info("Tor IP: " + ip);
-                    } else {
-                        julLog.warning("Tor IP check returned empty response");
-                    }
-                } catch (Exception e) {
-                    julLog.warning("Tor IP check failed: " + e.getMessage());
-                }
-            });
-            ipThread.setDaemon(true);
-            ipThread.setName("IPChecker-" + IP_CHECK_COUNTER.incrementAndGet());
-            ipThread.start();
+        long now = System.currentTimeMillis();
+        if (now - lastIpCheckMs < 30_000) {
+            return; // debounce: skip if checked within last 30s
         }
+        lastIpCheckMs = now;
+
+        log.info("[TorUtils] Tor circuit rotated, isTorRunning={}", AppServices.isTorRunning());
+        Thread ipThread = new Thread(() -> {
+            try {
+                // Wait up to 60s for Tor to finish bootstrapping
+                int waited = 0;
+                while (!AppServices.isTorRunning() && waited < 60) {
+                    Thread.sleep(2000);
+                    waited += 2;
+                }
+                if (!AppServices.isTorRunning()) {
+                    log.warn("[TorUtils] Tor not ready after 60s, IP check aborted");
+                    return;
+                }
+                Thread.sleep(5000);
+                HttpClientService httpClientService = AppServices.getHttpClientService();
+                if (httpClientService == null) {
+                    log.warn("[TorUtils] Tor IP check skipped: HTTP client not available");
+                    return;
+                }
+                Map<String, String> response = httpClientService.requestJson(CHECK_TOR_IP_URL, Map.class, null);
+                String ip = response != null ? response.getOrDefault("IP", response.get("ip")) : null;
+                if (ip != null) {
+                    log.info("[TorUtils] Tor exit IP: {}", ip);
+                } else {
+                    log.warn("[TorUtils] Tor IP check returned empty response");
+                }
+            } catch (Exception e) {
+                log.warn("[TorUtils] Tor IP check failed: {}", e.toString());
+            }
+        });
+        ipThread.setDaemon(true);
+        ipThread.setName("IPChecker-" + IP_CHECK_COUNTER.incrementAndGet());
+        ipThread.start();
     }
 
     public static void changeIdentity(HostAndPort proxy) {

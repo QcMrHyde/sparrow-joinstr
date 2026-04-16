@@ -58,10 +58,14 @@ public class NostrPublisher implements AutoCloseable {
         Identity poolIdentity;
         try {
             if (AppServices.isTorRunning()) {
-                Client.getInstance().disconnect();
+                try {
+                    Client.getInstance().disconnect();
+                } catch (Exception e) {
+                    // Not yet connected, safe to ignore
+                }
                 TorUtils.changeIdentity(AppServices.getTorProxy());
-                TorUtils.logTorIp();
             }
+                TorUtils.logTorIp();
 
             logger.info("Public key: " + SENDER.getPublicKey().toString());
 
