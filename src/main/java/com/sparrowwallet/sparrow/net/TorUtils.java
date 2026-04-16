@@ -26,17 +26,20 @@ public class TorUtils {
     private static final java.util.concurrent.atomic.AtomicInteger IP_CHECK_COUNTER = new java.util.concurrent.atomic.AtomicInteger(0);
 
     public static void logTorIp() {
-        if (AppServices.isTorRunning() && AppServices.isConnected()) {
+        if (AppServices.isTorRunning()) {
+            java.util.logging.Logger julLog = java.util.logging.Logger.getLogger("nostr.TorUtils");
             Thread ipThread = new Thread(() -> {
                 try {
                     Thread.sleep(3000);
                     HttpClientService httpClientService = AppServices.getHttpClientService();
                     Map<String, String> response = httpClientService.requestJson(CHECK_TOR_IP_URL, Map.class, null);
                     if (response != null && response.containsKey("ip")) {
-                        log.info("IP: " + response.get("ip"));
+                        julLog.info("Tor IP: " + response.get("ip"));
+                    } else {
+                        julLog.warning("Tor IP check returned empty response");
                     }
                 } catch (Exception e) {
-                    log.warn("Error checking IP: " + e.getMessage());
+                    julLog.warning("Tor IP check failed: " + e.getMessage());
                 }
             });
             ipThread.setDaemon(true);
