@@ -516,6 +516,12 @@ public class AppServices {
         return Tor.getDefault() != null;
     }
 
+    public void startTor() {
+        if (!isTorRunning() && torService != null && !torService.isRunning()) {
+            torService.start();
+        }
+    }
+
     public static boolean isUsingProxy() {
         return isTorRunning() || Config.get().isUseProxy();
     }
