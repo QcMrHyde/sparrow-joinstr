@@ -206,10 +206,14 @@ public class OtherPoolsController extends JoinstrFormController {
 
                 try {
                     if (AppServices.isTorRunning()) {
-                        Client.getInstance().disconnect();
+                        try {
+                            Client.getInstance().disconnect();
+                        } catch (Exception e) {
+                            // Not yet connected, safe to ignore
+                        }
                         TorUtils.changeIdentity(AppServices.getTorProxy());
-                        TorUtils.logTorIp();
                     }
+                        TorUtils.logTorIp();
 
                     client.connect(context);
                     client.send(reqMessage);

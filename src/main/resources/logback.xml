@@ -38,6 +38,10 @@
     <logger name="org.springframework.web.socket.sockjs.client.DefaultTransportRequest" level="OFF" />
     <logger name="org.xbill.DNS.dnssec.DnsSecVerifier" level="ERROR" />
 
+    <!-- Joinstr Tor circuit isolation logs -->
+    <logger name="com.sparrowwallet.sparrow.net.TorUtils" level="INFO"/>
+    <logger name="com.sparrowwallet.sparrow.net.Tor" level="INFO"/>
+
     <contextListener class="ch.qos.logback.classic.jul.LevelChangePropagator"/>
 
     <define name="appDir" class="com.sparrowwallet.drongo.PropertyDefiner">

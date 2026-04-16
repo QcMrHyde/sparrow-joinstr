@@ -149,10 +149,14 @@ public class NostrListener implements AutoCloseable {
             credentialsMap.put("timeout", poolCredentials.get("timeout"));
 
             if (AppServices.isTorRunning()) {
-                Client.getInstance().disconnect();
+                try {
+                    Client.getInstance().disconnect();
+                } catch (Exception e) {
+                    // Not yet connected, safe to ignore
+                }
                 TorUtils.changeIdentity(AppServices.getTorProxy());
-                TorUtils.logTorIp();
             }
+                TorUtils.logTorIp();
 
             credentialsMap.put("relay", poolCredentials.get("relay"));
             credentialsMap.put("private_key", poolCredentials.get("private_key"));
@@ -188,10 +192,14 @@ public class NostrListener implements AutoCloseable {
     private void connectAndSubscribe() {
         try {
             if (AppServices.isTorRunning()) {
-                Client.getInstance().disconnect();
+                try {
+                    Client.getInstance().disconnect();
+                } catch (Exception e) {
+                    // Not yet connected, safe to ignore
+                }
                 TorUtils.changeIdentity(AppServices.getTorProxy());
-                TorUtils.logTorIp();
             }
+                TorUtils.logTorIp();
 
             client = Client.getInstance();
             DefaultRequestContext context = new DefaultRequestContext();

@@ -108,10 +108,14 @@ public class CoinjoinHandler {
         executorService.submit(() -> {
             try {
                 if (AppServices.isTorRunning()) {
-                    Client.getInstance().disconnect();
+                    try {
+                        Client.getInstance().disconnect();
+                    } catch (Exception e) {
+                        // Not yet connected, safe to ignore
+                    }
                     TorUtils.changeIdentity(AppServices.getTorProxy());
-                    TorUtils.logTorIp();
                 }
+                    TorUtils.logTorIp();
 
                 JoinstrMessage message = new JoinstrMessage();
                 message.setType("output");
@@ -442,10 +446,14 @@ public class CoinjoinHandler {
     private void sendInputToPool(String psbtBase64) {
         try {
             if (AppServices.isTorRunning()) {
-                Client.getInstance().disconnect();
+                try {
+                    Client.getInstance().disconnect();
+                } catch (Exception e) {
+                    // Not yet connected, safe to ignore
+                }
                 TorUtils.changeIdentity(AppServices.getTorProxy());
-                TorUtils.logTorIp();
             }
+                TorUtils.logTorIp();
 
             JoinstrMessage message = new JoinstrMessage();
             message.setType("input");

@@ -189,10 +189,14 @@ public class JoinstrPoolList extends VBox {
                             new Thread(() -> {
                                 try {
                                     if(AppServices.isTorRunning()) {
-                                        Client.getInstance().disconnect();
+                                        try {
+                                            Client.getInstance().disconnect();
+                                        } catch (Exception e) {
+                                            // Not yet connected, safe to ignore
+                                        }
                                         TorUtils.changeIdentity(AppServices.getTorProxy());
-                                        TorUtils.logTorIp();
                                     }
+                                        TorUtils.logTorIp();
 
                                     PublicKey poolPubKey = new PublicKey(pool.getPubkey());
                                     String requestContent = "{\"type\": \"join_pool\"}";
