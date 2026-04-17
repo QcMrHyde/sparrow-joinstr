@@ -1,0 +1,58 @@
+# Binary Release Signing
+
+To ensure the integrity and authenticity of `sparrow-joinstr` releases, we use a PGP signing process. This document explains how maintainers can sign releases locally without exposing their private keys to GitHub.
+
+## Overview
+
+1.  **Multiple Binaries**: The build process produces artifacts for Linux, macOS, and Windows.
+2.  **Manifest File**: A `manifest.txt` is generated containing the SHA256 hashes of all binaries.
+3.  **PGP Signature**: The `manifest.txt` is signed with a PGP key resulting in `manifest.txt.asc`.
+4.  **Verification**: Users can verify any binary by checking its hash against the signed manifest.
+
+## Maintainer Workflow
+
+### 1. Run the Build
+Trigger the `Package` workflow manually on GitHub (via `Actions` -> `Package` -> `Run workflow`).
+
+### 2. Download the Release Bundle
+Once the workflow completes, download the artifact named `Sparrow-Release-Bundle`. This contains all platform-specific binaries in a single zip file.
+
+### 3. Sign the Binaries
+Extract the bundle and run the `sign_release.sh` script:
+
+```bash
+# Extract the bundle
+unzip Sparrow-Release-Bundle.zip -d release-v1.2.3
+
+# Run the signing script
+./sign_release.sh release-v1.2.3
+```
+
+The script will:
+- Generate `manifest.txt` with SHA256 hashes.
+- Prompt you to sign it using your local GPG key to create `manifest.txt.asc`.
+
+### 4. Create a GitHub Release
+Create a new Release on GitHub and upload:
+- All binaries from the `release-v1.2.3` folder.
+- The `manifest.txt` file.
+- The `manifest.txt.asc` signature file.
+
+## Verification for Users
+
+Users can verify the release using the following steps:
+
+1.  **Import the Developer Key**:
+    ```bash
+    gpg --import developer_key.asc
+    ```
+2.  **Verify the Manifest**:
+    ```bash
+    gpg --verify manifest.txt.asc manifest.txt
+    ```
+3.  **Verify the Binary Hash**:
+    ```bash
+    sha256sum -c manifest.txt --ignore-missing
+    ```
+
+Sparrow Wallet also includes a "Verify Download" tool in the UI that can automate this process if the manifest and signature are provided.
