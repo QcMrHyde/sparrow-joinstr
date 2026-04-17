@@ -6,8 +6,9 @@ set -e
 # and signs it with GPG.
 
 show_help() {
-    echo "Usage: $0 [directory]"
+    echo "Usage: $0 [directory] [signer_name]"
     echo "  [directory]: Directory containing the binaries to sign (defaults to current directory)"
+    echo "  [signer_name]: Optional name of the signer (e.g. 'floppy') to append to the signature filename"
     echo ""
     echo "This script will:"
     echo "1. Generate manifest.txt with SHA256 hashes of all Sparrow binaries."
@@ -20,6 +21,11 @@ if [[ "$1" == "--help" || "$1" == "-h" ]]; then
 fi
 
 TARGET_DIR="${1:-.}"
+SIGNER_NAME="${2}"
+SIG_SUFFIX="asc"
+if [ -n "$SIGNER_NAME" ]; then
+    SIG_SUFFIX="$SIGNER_NAME.asc"
+fi
 
 if [ ! -d "$TARGET_DIR" ]; then
     echo "Error: Directory $TARGET_DIR does not exist."
@@ -75,12 +81,12 @@ if command -v gpg >/dev/null 2>&1; then
     # We use --detach-sign and --armor to create a .asc file
     # We also use --clear-sign as an alternative if the user prefers, 
     # but Sparrow's DownloadVerifierDialog supports detached signatures.
-    gpg --detach-sign --armor --output "$MANIFEST_FILE.asc" "$MANIFEST_FILE"
+    gpg --detach-sign --armor --output "$MANIFEST_FILE.$SIG_SUFFIX" "$MANIFEST_FILE"
     
     echo ""
     echo "Success! Created:"
     echo "  - $MANIFEST_FILE"
-    echo "  - $MANIFEST_FILE.asc"
+    echo "  - $MANIFEST_FILE.$SIG_SUFFIX"
 else
     echo "Warning: gpg not found. Please sign manifest.txt manually:"
     echo "  gpg --detach-sign --armor manifest.txt"
