@@ -724,7 +724,7 @@ public class CoinjoinHandler {
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
                 try {
-                    JoinstrHistoryEntry entry = new JoinstrHistoryEntry(tx.getTxId().toString(), poolRelay, poolAmountSats, Instant.now().getEpochSecond());
+                    JoinstrHistoryEntry entry = new JoinstrHistoryEntry(tx.getTxId().toString(), relay, poolAmountSats, Instant.now().getEpochSecond());
                     ArrayList<JoinstrHistoryEntry> history = Config.get().getHistoryStore();
                     history.add(entry);
                     Config.get().setHistoryStore(history);
