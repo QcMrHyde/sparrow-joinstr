@@ -22,10 +22,10 @@ Extract the bundle and run the `sign_release.sh` script:
 
 ```bash
 # Extract the bundle
-unzip Sparrow-Release-Bundle.zip -d release-v1.2.3
+unzip Sparrow-Release-Bundle.zip -d release-v0.1.0
 
 # Run the signing script (with optional signer name)
-./sign_release.sh release-v1.2.3 [signer_name]
+./sign_release.sh release-v0.1.0 [signer_name]
 ```
 
 The script will:
@@ -34,7 +34,7 @@ The script will:
 
 ### 4. Create a GitHub Release
 Create a new Release on GitHub and upload:
-- All binaries from the `release-v1.2.3` folder.
+- All binaries from the `release-v0.1.0` folder.
 - The `manifest.txt` file (should be identical for all signers).
 - The `manifest.txt.[signer_name].asc` signature file(s).
 
@@ -44,13 +44,13 @@ To provide maximum security, both `QcMrHyde` and `floppy` should sign the same m
 
 ### 1. Floppy Signs:
 ```bash
-./sign_release.sh release-v1.2.3 floppy
+./sign_release.sh release-v0.1.0 floppy
 # Uploads manifest.txt and manifest.txt.floppy.asc
 ```
 
 ### 2. QcMrHyde Signs:
 ```bash
-./sign_release.sh release-v1.2.3 qcmrhyde
+./sign_release.sh release-v0.1.0 qcmrhyde
 # Uploads manifest.txt.qcmrhyde.asc (using the same manifest.txt)
 ```
 
