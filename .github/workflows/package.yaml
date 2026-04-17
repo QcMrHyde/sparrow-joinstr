@@ -57,3 +57,24 @@ jobs:
           path: |
             build/jpackage/*
             !build/jpackage/Sparrow/
+
+  aggregate:
+    name: Aggregate Release Artifacts
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - name: Flatten and Prepare Bundle
+        run: |
+          mkdir release-bundle
+          # Find all release binaries in downloaded artifacts and copy them to a single directory
+          find artifacts -type f \( -name "*.zip" -o -name "*.tar.gz" -o -name "*.msi" -o -name "*.deb" -o -name "*.rpm" -o -name "*.dmg" \) -exec cp {} release-bundle/ \;
+          ls -R release-bundle/
+      - name: Upload Release Bundle
+        uses: actions/upload-artifact@v4
+        with:
+          name: Sparrow-Release-Bundle
+          path: release-bundle/
