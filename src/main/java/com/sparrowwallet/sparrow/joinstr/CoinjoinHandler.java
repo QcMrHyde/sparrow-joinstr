@@ -462,7 +462,7 @@ public class CoinjoinHandler {
                 PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
 
                 for (PSBTInput input : psbt.getPsbtInputs()) {
-                    String outpoint = input.getOutpoint().toString();
+                    String outpoint = input.getInput().getOutpoint().toString();
                     if (allInputs.contains(outpoint)) {
                         logger.warning("Rejecting duplicate input: " + outpoint);
                         return;
@@ -496,7 +496,7 @@ public class CoinjoinHandler {
 
                 inputPSBTs.add(psbtBase64);
                 for (PSBTInput input : psbt.getPsbtInputs()) {
-                    allInputs.add(input.getOutpoint().toString());
+                    allInputs.add(input.getInput().getOutpoint().toString());
                 }
 
                 logger.info("Received valid input " + inputPSBTs.size() + "/" + numPeers);
@@ -685,7 +685,7 @@ public class CoinjoinHandler {
             broadcastService.setOnSucceeded(event -> {
                 logger.info("Coinjoin transaction broadcast successfully! TXID: " + tx.getTxId());
                 try {
-                    JoinstrHistoryEntry entry = new JoinstrHistoryEntry(tx.getTxId().toString(), poolRelay, poolAmountSats, Instant.now().getEpochSecond());
+                    JoinstrHistoryEntry entry = new JoinstrHistoryEntry(tx.getTxId().toString(), relay, poolAmountSats, Instant.now().getEpochSecond());
                     ArrayList<JoinstrHistoryEntry> history = Config.get().getHistoryStore();
                     history.add(entry);
                     Config.get().setHistoryStore(history);

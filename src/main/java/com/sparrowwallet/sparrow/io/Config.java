@@ -8,6 +8,7 @@ import com.sparrowwallet.sparrow.Mode;
 import com.sparrowwallet.sparrow.Theme;
 import com.sparrowwallet.sparrow.control.QRDensity;
 import com.sparrowwallet.sparrow.control.WebcamResolution;
+import com.sparrowwallet.sparrow.joinstr.JoinstrHistoryEntry;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.net.*;
 import com.sparrowwallet.sparrow.wallet.FeeRatesSelection;
