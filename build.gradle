@@ -21,6 +21,9 @@ def headless = "true".equals(System.getProperty("java.awt.headless"))
 
 group = 'com.sparrowwallet'
 version = '2.3.2-joinstr.0.1.0'
+// jpackage requires a numeric-only version (X.Y.Z) on Windows and macOS.
+// This is the version embedded into the installer/package metadata.
+def jpackageVersion = '0.1.0'
 
 repositories {
     mavenCentral()
@@ -247,7 +250,7 @@ jlink {
     jpackage {
         imageName = "Sparrow"
         installerName = "Sparrow"
-        appVersion = "${version}"
+        appVersion = jpackageVersion
         skipInstaller = os.macOsX || properties.skipInstallers
         imageOptions = []
         installerOptions = ['--file-associations', 'src/main/deploy/psbt.properties', '--file-associations', 'src/main/deploy/txn.properties', '--file-associations', 'src/main/deploy/asc.properties', '--file-associations', 'src/main/deploy/bitcoin.properties', '--file-associations', 'src/main/deploy/auth47.properties', '--file-associations', 'src/main/deploy/lightning.properties', '--license-file', 'LICENSE']
@@ -312,7 +315,7 @@ tasks.register('prepareResourceDir', Copy) {
                 if(line.contains('${size}')) {
                     line = line.replace('${size}', getDirectorySize(layout.buildDirectory.dir('jpackage/Sparrow').get().asFile))
                 }
-                return line.replace('${version}', "${version}").replace('${arch}', osArch == 'aarch64' ? 'arm64' : 'amd64')
+                return line.replace('${version}', jpackageVersion).replace('${arch}', osArch == 'aarch64' ? 'arm64' : 'amd64')
             }
         }
     }
