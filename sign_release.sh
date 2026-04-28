@@ -6,9 +6,11 @@ set -e
 # and signs it with GPG.
 
 show_help() {
-    echo "Usage: $0 [directory] [signer_name]"
-    echo "  [directory]: Directory containing the binaries to sign (defaults to current directory)"
+    echo "Usage: $0 [directory] [signer_name] [key_id]"
+    echo "  [directory]:   Directory containing the binaries to sign (defaults to current directory)"
     echo "  [signer_name]: Optional name of the signer (e.g. 'floppy') to append to the signature filename"
+    echo "  [key_id]:      Optional GPG key ID or fingerprint to sign with (e.g. 'ABCDEF1234567890')"
+    echo "                 Defaults to GPG's default key. Recommended for multi-maintainer setups."
     echo ""
     echo "This script will:"
     echo "1. Generate manifest.txt with SHA256 hashes of all Sparrow binaries."
@@ -22,6 +24,7 @@ fi
 
 TARGET_DIR="${1:-.}"
 SIGNER_NAME="${2}"
+KEY_ID="${3}"
 SIG_SUFFIX="asc"
 if [ -n "$SIGNER_NAME" ]; then
     SIG_SUFFIX="$SIGNER_NAME.asc"
@@ -43,11 +46,11 @@ EXTENSIONS=("zip" "tar.gz" "msi" "deb" "rpm" "dmg")
 MANIFEST_FILE="manifest.txt"
 rm -f "$MANIFEST_FILE"
 
-# Detect SHA256 tool
+# Detect SHA256 tool — stored as an array to avoid word-splitting issues
 if command -v sha256sum >/dev/null 2>&1; then
-    SHA_TOOL="sha256sum"
+    SHA_CMD=(sha256sum)
 elif command -v shasum >/dev/null 2>&1; then
-    SHA_TOOL="shasum -a 256"
+    SHA_CMD=(shasum -a 256)
 else
     echo "Error: Neither sha256sum nor shasum was found. Please install one of them."
     exit 1
@@ -55,15 +58,15 @@ fi
 
 # Generate hashes
 for ext in "${EXTENSIONS[@]}"; do
-    # Use find to handle files with spaces or unusual names, but keep it simple for standard releases
-    find . -maxdepth 1 -type f -name "*.$ext" | sort | while read -r file; do
+    while IFS= read -r file; do
         filename=$(basename "$file")
         echo "Processing $filename..."
-        $SHA_TOOL "$filename" >> "$MANIFEST_FILE"
-    done
+        "${SHA_CMD[@]}" "$filename" >> "$MANIFEST_FILE"
+    done < <(find . -maxdepth 1 -type f -name "*.$ext" | sort)
 done
 
-if [ ! -f "$MANIFEST_FILE" ]; then
+# Use -s (non-empty) so a failed hash that produced no output is also caught
+if [ ! -s "$MANIFEST_FILE" ]; then
     echo "No binaries found to sign in $TARGET_DIR."
     exit 0
 fi
@@ -77,12 +80,17 @@ echo ""
 if command -v gpg >/dev/null 2>&1; then
     echo "Signing manifest.txt with GPG..."
     echo "You may be prompted for your PGP passphrase."
-    
-    # We use --detach-sign and --armor to create a .asc file
-    # We also use --clear-sign as an alternative if the user prefers, 
-    # but Sparrow's DownloadVerifierDialog supports detached signatures.
-    gpg --detach-sign --armor --output "$MANIFEST_FILE.$SIG_SUFFIX" "$MANIFEST_FILE"
-    
+
+    # Build the gpg command; use --local-user when a key ID is supplied so the
+    # correct key is chosen in multi-maintainer setups with multiple keys in the ring.
+    GPG_ARGS=(--detach-sign --armor --output "$MANIFEST_FILE.$SIG_SUFFIX")
+    if [ -n "$KEY_ID" ]; then
+        GPG_ARGS+=(--local-user "$KEY_ID")
+    fi
+    GPG_ARGS+=("$MANIFEST_FILE")
+
+    gpg "${GPG_ARGS[@]}"
+
     echo ""
     echo "Success! Created:"
     echo "  - $MANIFEST_FILE"
