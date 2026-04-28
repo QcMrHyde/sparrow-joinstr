@@ -9,16 +9,8 @@ jobs:
   build:
     runs-on: ${{ matrix.os }}
     strategy:
-      fail-fast: false
       matrix:
-        include:
-          - os: windows-2022
-          - os: ubuntu-22.04
-          - os: ubuntu-22.04-arm
-          - os: macos-13
-          - os: macos-14
-            continue-on-error: true
-    continue-on-error: ${{ matrix.continue-on-error == true }}
+        os: [windows-2022, ubuntu-22.04, macos-13]
     steps:
       - uses: actions/checkout@v5
         with:
@@ -69,7 +61,6 @@ jobs:
   aggregate:
     name: Aggregate Release Artifacts
     needs: build
-    if: always()
     runs-on: ubuntu-22.04
     steps:
       - name: Download all artifacts
