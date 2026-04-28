@@ -23,7 +23,7 @@ jobs:
       - name: Show Build Versions
         run: ./gradlew -v
       - name: Build with Gradle
-        run: ./gradlew jpackage
+        run: ./gradlew jpackage --info
       - name: Package zip distribution
         if: ${{ runner.os == 'Windows' || runner.os == 'macOS' }}
         run: ./gradlew packageZipDistribution
