@@ -2,7 +2,7 @@ plugins {
     id 'application'
     id 'org-openjfx-javafxplugin'
     id 'org.beryx.jlink' version '3.2.1'
-    id 'org.gradlex.extra-java-module-info' version '1.13.1'
+    id 'org.gradlex.extra-java-module-info' version '1.13'
     id 'io.matthewnelson.kmp.tor.resource-filterjar' version '408.16.3'
 }
 
@@ -183,6 +183,7 @@ application {
 }
 
 jlink {
+    javaHome = System.getProperty('java.home')
     mergedModule {
         requires 'javafx.graphics'
         requires 'javafx.controls'
@@ -251,7 +252,7 @@ jlink {
         imageName = "Sparrow"
         installerName = "Sparrow"
         appVersion = jpackageVersion
-        skipInstaller = os.macOsX || properties.skipInstallers
+        skipInstaller = os.macOsX || project.hasProperty('skipInstallers')
         imageOptions = []
         installerOptions = ['--file-associations', 'src/main/deploy/psbt.properties', '--file-associations', 'src/main/deploy/txn.properties', '--file-associations', 'src/main/deploy/asc.properties', '--file-associations', 'src/main/deploy/bitcoin.properties', '--file-associations', 'src/main/deploy/auth47.properties', '--file-associations', 'src/main/deploy/lightning.properties', '--license-file', 'LICENSE']
         if(os.windows) {
@@ -269,6 +270,7 @@ jlink {
             }
             installerOptions += ['--resource-dir', layout.buildDirectory.dir('deploy/package').get().asFile.toString(), '--linux-app-category', 'utils', '--linux-app-release', '1', '--linux-rpm-license-type', 'ASL 2.0', '--linux-deb-maintainer', 'mail@sparrowwallet.com']
             imageOptions += ['--icon', 'src/main/deploy/package/linux/Sparrow.png', '--resource-dir', 'src/main/deploy/package/linux/']
+            installerType = "deb"
         }
         if(os.macOsX) {
             installerOptions += ['--mac-sign', '--mac-signing-key-user-name', 'Craig Raw (UPLVMSK9D7)']
@@ -285,7 +287,7 @@ jlink {
 
 if(os.linux) {
     tasks.jlink.finalizedBy('addUserWritePermission', 'copyUdevRules')
-    tasks.jpackageImage.finalizedBy('prepareResourceDir')
+    tasks.jpackageImage.dependsOn('prepareResourceDir')
 } else {
     tasks.jlink.finalizedBy('addUserWritePermission')
 }
@@ -361,35 +363,49 @@ tasks.register('packageTarDistribution', Tar) {
 }
 
 extraJavaModuleInfo {
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-api", "nostr.api")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-base", "nostr.base")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-event", "nostr.event")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-id", "nostr.id")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-util", "nostr.util")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-client", "nostr.client")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-command-interface", "nostr.command.handler")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-context-interface", "nostr.context")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-context", "nostr.context.impl")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-crypto", "nostr.crypto")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-connection", "nostr.connection")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-controller", "nostr.controller")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-encryption", "nostr.encryption")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-encryption-nip04", "nostr.encryption.nip04dm")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-encryption-nip44", "nostr.encryption.nip44dm")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-command-provider", "nostr.command.provider")
+    knownModule("com.github.1440000bytes.nostr-java:nostr-java-examples", "nostr.examples")
+
     module('com.github.1440000bytes:nostr-java', 'nostr.java') {
-        exports('nostr.api')
-        exports('nostr.base')
-        exports('nostr.event')
-        exports('nostr.event.impl')
-        exports('nostr.id')
-        exports('nostr.ws')
-        exports('nostr.ws.listener')
-        exports('nostr.crypto')
-        exports('nostr.util')
-        requires('java.base')
-        requires('java.net.http')
+        requires('nostr.api')
+        requires('nostr.base')
+        requires('nostr.event')
+        requires('nostr.id')
+        requires('nostr.util')
+        requires('nostr.client')
+        requires('nostr.command.handler')
+        requires('nostr.context')
+        requires('nostr.context.impl')
     }
-
-    module('com.squareup.okio:okio', 'com.squareup.okio') {
+    module('com.squareup.okio:okio', 'okio') {
         exports('okio')
-        requires('java.base')
-        requires('org.jetbrains.kotlin.stdlib')
+        requires('kotlin.stdlib')
     }
 
-    module('me.champeau.openbeans:openbeans', 'me.champeau.openbeans') {
-        exports('com.sun.beans')
-        exports('com.sun.beans.decoder')
-        exports('com.sun.beans.editors')
-        exports('com.sun.beans.finder')
-        exports('com.sun.beans.infos')
-        exports('com.sun.beans.util')
-        requires('java.base')
+    module('me.champeau.openbeans:openbeans', 'openbeans') {
+        exports('com.googlecode.openbeans')
+        exports('com.googlecode.openbeans.beancontext')
         requires('java.desktop')
+    }
+    module('com.squareup.okhttp3:okhttp', 'okhttp3') {
+        exports('okhttp3')
+        requires('okio')
+        requires('kotlin.stdlib')
     }
 
 
