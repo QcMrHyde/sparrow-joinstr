@@ -1,3 +1,16 @@
+pluginManagement {
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id == 'org.gradlex.extra-java-module-info') {
+                useVersion '1.13.1'
+            }
+            if (requested.id.id == 'org.beryx.jlink') {
+                useVersion '3.2.1'
+            }
+        }
+    }
+}
+
 rootProject.name = 'sparrow'
 include 'drongo'
 include 'lark'
