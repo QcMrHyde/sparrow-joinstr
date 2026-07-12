@@ -27,6 +27,7 @@ public class JoinstrPool {
     private final SimpleStringProperty status;
     private final javafx.beans.property.SimpleIntegerProperty connectedPeers;
     private String privateKey;
+    private String feeRate = "1";
     private JoinPoolHandler handler;
 
     public JoinstrPool(String relay, String pubkey, String denomination,
@@ -79,6 +80,25 @@ public class JoinstrPool {
 
     public void setPrivateKey(String privateKey) {
         this.privateKey = privateKey;
+    }
+
+    public String getFeeRate() {
+        return feeRate;
+    }
+
+    public void setFeeRate(String feeRate) {
+        this.feeRate = feeRate;
+    }
+
+    public long getParsedFeeRate() {
+        try {
+            if (feeRate == null || feeRate.trim().isEmpty()) {
+                return 1;
+            }
+            return Long.parseLong(feeRate.trim());
+        } catch (Exception e) {
+            return 1;
+        }
     }
 
     public String getDenomination() {
@@ -252,6 +272,7 @@ public class JoinstrPool {
         private final String timeout;
         private final String status;
         private final String privateKey;
+        private final String feeRate;
 
         public JoinstrPoolData(JoinstrPool joinstrPool) {
             this.relay = joinstrPool.getRelay();
@@ -261,10 +282,15 @@ public class JoinstrPool {
             this.timeout = joinstrPool.getTimeout();
             this.status = joinstrPool.getStatus();
             this.privateKey = joinstrPool.getPrivateKey();
+            this.feeRate = joinstrPool.getFeeRate();
         }
 
         public JoinstrPool getPoolObject() {
-            return new JoinstrPool(relay, pubkey, denomination, peers, timeout, privateKey, status);
+            JoinstrPool pool = new JoinstrPool(relay, pubkey, denomination, peers, timeout, privateKey, status);
+            if (feeRate != null) {
+                pool.setFeeRate(feeRate);
+            }
+            return pool;
         }
     }
 
