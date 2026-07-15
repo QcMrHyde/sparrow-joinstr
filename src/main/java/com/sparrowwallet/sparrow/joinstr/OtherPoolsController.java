@@ -50,6 +50,28 @@ public class OtherPoolsController extends JoinstrFormController {
     private java.util.logging.Handler currentEventHandler;
     private final AtomicBoolean isFetching = new AtomicBoolean(false);
 
+    /**
+     * Read the relay from a pool event, preferring the NIP "relays" array and falling back to the
+     * legacy single "relay" field, so pools from other joinstr clients are not silently dropped.
+     */
+    static String extractRelay(JsonNode poolData) {
+        if (poolData.has("relays") && poolData.get("relays").isArray() && poolData.get("relays").size() > 0) {
+            return poolData.get("relays").get(0).asText();
+        }
+        if (poolData.has("relay")) {
+            return poolData.get("relay").asText();
+        }
+        return null;
+    }
+
+    /** Legacy pools omit "network"; those are accepted. Otherwise the network must match ours. */
+    static boolean networkMatches(JsonNode poolData) {
+        if (!poolData.has("network")) {
+            return true;
+        }
+        return poolData.get("network").asText().equalsIgnoreCase(com.sparrowwallet.drongo.Network.get().getName());
+    }
+
     @Override
     public void initializeView() {
         try {
@@ -150,8 +172,17 @@ public class OtherPoolsController extends JoinstrFormController {
                                                 return;
                                             }
 
+                                            String relayUrl = extractRelay(poolData);
+                                            if (relayUrl == null || relayUrl.isEmpty()
+                                                    || !networkMatches(poolData)
+                                                    || !poolData.has("public_key")
+                                                    || !poolData.has("denomination")
+                                                    || !poolData.has("peers")) {
+                                                return;
+                                            }
+
                                             JoinstrPool pool = new JoinstrPool(
-                                                    poolData.get("relay").asText(),
+                                                    relayUrl,
                                                     poolData.get("public_key").asText(),
                                                     poolData.get("denomination").asText(),
                                                     poolData.get("peers").asText(),

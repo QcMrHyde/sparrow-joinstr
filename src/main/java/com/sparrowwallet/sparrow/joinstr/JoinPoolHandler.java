@@ -146,10 +146,14 @@ public class JoinPoolHandler {
             if (openWallets.isEmpty()) {
                 throw new IllegalStateException("No wallet found");
             }
-            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> firstWallet = openWallets.entrySet().iterator()
-                    .next();
-            com.sparrowwallet.drongo.wallet.Wallet wallet = firstWallet.getKey();
-            Storage storage = firstWallet.getValue();
+            Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet = selectWallet(openWallets);
+            if (selectedWallet == null) {
+                logger.warning("No wallet selected for coinjoin");
+                Platform.runLater(() -> statusCallback.accept("Error: No wallet selected"));
+                return;
+            }
+            com.sparrowwallet.drongo.wallet.Wallet wallet = selectedWallet.getKey();
+            Storage storage = selectedWallet.getValue();
 
             WalletForm walletForm = new WalletForm(storage, wallet);
             NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);
@@ -171,6 +175,33 @@ public class JoinPoolHandler {
             e.printStackTrace();
             Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
+    }
+
+    /**
+     * Choose which open wallet to use for the coinjoin. With a single wallet it is used directly;
+     * with several, the user is prompted so the output address and input UTXO come from the same
+     * wallet they intend, rather than an arbitrary first entry.
+     */
+    private Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectWallet(
+            Map<com.sparrowwallet.drongo.wallet.Wallet, Storage> openWallets) throws Exception {
+        if (openWallets.size() == 1) {
+            return openWallets.entrySet().iterator().next();
+        }
+
+        java.util.concurrent.FutureTask<Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage>> task = new java.util.concurrent.FutureTask<>(
+                () -> {
+                    com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog dialog = new com.sparrowwallet.sparrow.joinstr.control.WalletSelectionDialog(
+                            openWallets);
+                    dialog.showAndWait();
+                    return dialog.getSelectedWallet();
+                });
+
+        if (Platform.isFxApplicationThread()) {
+            task.run();
+        } else {
+            Platform.runLater(task);
+        }
+        return task.get();
     }
 
     /**

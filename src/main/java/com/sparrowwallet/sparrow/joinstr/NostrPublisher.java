@@ -76,25 +76,31 @@ public class NostrPublisher implements AutoCloseable {
 
             List<BaseTag> tags = new ArrayList<>();
             String poolId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
+            String relayUrl = RELAYS.values().iterator().next();
+            String network = com.sparrowwallet.drongo.Network.get().getName();
             String content = String.format(
                     "{\n" +
+                            "  \"versions\": [\"1\"],\n" +
                             "  \"type\": \"new_pool\",\n" +
                             "  \"id\": \"%s\",\n" +
+                            "  \"network\": \"%s\",\n" +
                             "  \"public_key\": \"%s\",\n" +
                             "  \"denomination\": %s,\n" +
                             "  \"peers\": %s,\n" +
                             "  \"timeout\": %d,\n" +
+                            "  \"relays\": [\"%s\"],\n" +
                             "  \"relay\": \"%s\",\n" +
                             "  \"fee_rate\": 1,\n" +
-                            "  \"transport\": \"tor\",\n" +
-                            "  \"vpn_gateway\": null\n" +
+                            "  \"transport\": { \"tor\": { \"enable\": true }, \"vpn\": { \"enable\": false, \"vpn_gateway\": null } }\n" +
                             "}",
                     poolId,
+                    network,
                     poolIdentity.getPublicKey().toString(),
                     denomination,
                     peers,
                     timeout,
-                    RELAYS.values().iterator().next());
+                    relayUrl,
+                    relayUrl);
 
             NIP01 nip01 = new NIP01(SENDER);
 
