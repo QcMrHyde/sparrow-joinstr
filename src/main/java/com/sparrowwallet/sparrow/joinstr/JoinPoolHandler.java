@@ -9,6 +9,8 @@ import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
 import javafx.application.Platform;
+import javafx.scene.control.Alert;
+import javafx.scene.control.ButtonType;
 import nostr.id.Identity;
 
 import java.util.*;
@@ -19,14 +21,29 @@ import java.util.logging.Logger;
 public class JoinPoolHandler {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
 
+    /** Absolute bounds on an accepted pool fee rate (sat/vB). */
+    static final long MIN_FEE_RATE = 1;
+    static final long MAX_FEE_RATE = 100;
+
     private Identity joinIdentity;
     private JoinstrPool pool;
     private String relay;
     private NostrListener credentialsListener;
     private Identity poolIdentity;
     private int numPeers;
+    private long feeRate = 1;
     private Consumer<String> statusCallback;
     private CoinjoinHandler coinjoinHandler;
+
+    /**
+     * Accept a fee rate that stays within a tolerance band of the advertised rate (it may drift
+     * between pool creation and the coinjoin) and within the absolute [MIN_FEE_RATE, MAX_FEE_RATE] range.
+     */
+    static boolean isFeeRateAcceptable(long feeRate, long advertisedFeeRate) {
+        long lo = Math.max(MIN_FEE_RATE, advertisedFeeRate / 2);
+        long hi = Math.min(MAX_FEE_RATE, advertisedFeeRate * 2);
+        return feeRate >= lo && feeRate <= hi;
+    }
 
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
@@ -96,13 +113,22 @@ public class JoinPoolHandler {
 
             Platform.runLater(() -> statusCallback.accept("Credentials received"));
 
-            long feeRate = 1;
-            if (message.getFeeRate() != null) {
-                feeRate = message.getFeeRate();
+            long advertisedFeeRate = pool.getParsedFeeRate();
+            long credentialsFeeRate = (message.getFeeRate() != null) ? message.getFeeRate() : advertisedFeeRate;
+
+            if (!isFeeRateAcceptable(credentialsFeeRate, advertisedFeeRate)) {
+                logger.severe("Rejecting pool: fee rate " + credentialsFeeRate
+                        + " sat/vB is outside the accepted range for advertised " + advertisedFeeRate
+                        + " sat/vB (absolute max " + MAX_FEE_RATE + ")");
+                Platform.runLater(() -> statusCallback.accept("Error: Fee rate out of range"));
+                stop();
+                return;
             }
 
+            this.feeRate = credentialsFeeRate;
+
             // Use CoinjoinHandler for the rest of the flow
-            startCoinjoinFlow(feeRate);
+            startCoinjoinFlow(credentialsFeeRate);
 
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
@@ -224,6 +250,24 @@ public class JoinPoolHandler {
 
                 logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
                         + selectedUtxo.getValue());
+
+                long feePerOutput = feeRate * 150;
+                long outputAmount = poolAmountSats - feePerOutput;
+                long myFee = selectedUtxo.getValue() - outputAmount;
+
+                java.util.Optional<ButtonType> confirm = AppServices.showAlertDialog(
+                        "Confirm Coinjoin Input",
+                        "Input: " + selectedUtxo.getValue() + " sats\n" +
+                                "Output: " + outputAmount + " sats\n" +
+                                "Fee: " + myFee + " sats (" + feeRate + " sat/vB)\n\n" +
+                                "Proceed with signing?",
+                        Alert.AlertType.CONFIRMATION, ButtonType.CANCEL, ButtonType.OK);
+
+                if (confirm.isEmpty() || confirm.get() != ButtonType.OK) {
+                    logger.info("User cancelled coinjoin input confirmation");
+                    Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
+                    return;
+                }
 
                 coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
             } else {
