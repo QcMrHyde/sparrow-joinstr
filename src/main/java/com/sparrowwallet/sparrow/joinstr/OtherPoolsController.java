@@ -175,15 +175,17 @@ public class OtherPoolsController extends JoinstrFormController {
                                             String relayUrl = extractRelay(poolData);
                                             if (relayUrl == null || relayUrl.isEmpty()
                                                     || !networkMatches(poolData)
-                                                    || !poolData.has("public_key")) {
+                                                    || !poolData.has("public_key")
+                                                    || !poolData.has("denomination")
+                                                    || !poolData.has("peers")) {
                                                 return;
                                             }
 
                                             JoinstrPool pool = new JoinstrPool(
                                                     relayUrl,
                                                     poolData.get("public_key").asText(),
-                                                    poolData.has("denomination") ? poolData.get("denomination").asText() : "",
-                                                    poolData.has("peers") ? poolData.get("peers").asText() : "",
+                                                    poolData.get("denomination").asText(),
+                                                    poolData.get("peers").asText(),
                                                     String.valueOf(timeout));
 
                                             if (pools.stream().noneMatch(
