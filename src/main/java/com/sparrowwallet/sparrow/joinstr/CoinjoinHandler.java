@@ -3,7 +3,6 @@ package com.sparrowwallet.sparrow.joinstr;
 import com.google.gson.Gson;
 import com.sparrowwallet.drongo.address.Address;
 import com.sparrowwallet.drongo.protocol.Script;
-import com.sparrowwallet.drongo.protocol.SigHash;
 import com.sparrowwallet.drongo.protocol.Transaction;
 import com.sparrowwallet.drongo.protocol.TransactionInput;
 import com.sparrowwallet.drongo.protocol.TransactionOutput;
@@ -30,7 +29,6 @@ import nostr.id.Identity;
 import com.sparrowwallet.sparrow.net.TorUtils;
 import org.bouncycastle.util.encoders.Base64;
 
-import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -74,9 +72,7 @@ public class CoinjoinHandler {
 
         this.numPeers = pool.getParsedPeers();
 
-        String denomStr = pool.getDenomination().replace(" BTC", "").replace("BTC", "").trim();
-        BigDecimal denom = new BigDecimal(denomStr);
-        this.poolAmountSats = denom.movePointRight(8).longValueExact();
+        this.poolAmountSats = CoinjoinMath.denominationToSats(pool.getDenomination());
     }
 
     public void setFeeRate(long feeRate) {
@@ -213,9 +209,9 @@ public class CoinjoinHandler {
                 ", value=" + selectedUtxo.getValue() + " sats");
 
         long value = selectedUtxo.getValue();
-        long minAllowed = poolAmountSats + 500;
-        long maxAllowed = poolAmountSats + 5000;
-        if (value < minAllowed || value > maxAllowed) {
+        long minAllowed = CoinjoinMath.minInputSats(poolAmountSats);
+        long maxAllowed = CoinjoinMath.maxInputSats(poolAmountSats);
+        if (!CoinjoinMath.isInputValueInRange(value, poolAmountSats)) {
             Platform.runLater(() -> {
                 com.sparrowwallet.sparrow.AppServices.showErrorDialog("Invalid UTXO",
                         "The selected UTXO has a value of " + value + " sats, which is outside the allowed range of "
@@ -304,10 +300,8 @@ public class CoinjoinHandler {
 
             tx.addInput(utxo.getHash(), (int) utxo.getIndex(), new Script(new byte[0]));
 
-            long estimatedTxSize = 150L * numPeers;
-            long totalFee = feeRate * estimatedTxSize;
-            long feePerOutput = totalFee / numPeers;
-            long outputAmount = poolAmountSats - feePerOutput;
+            long feePerOutput = CoinjoinMath.feePerOutput(feeRate, numPeers);
+            long outputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers);
 
             logger.info("Creating PSBT: pool=" + poolAmountSats + " sats, fee/output=" + feePerOutput + ", output="
                     + outputAmount);
@@ -324,7 +318,7 @@ public class CoinjoinHandler {
             PSBT psbt = new PSBT(tx);
 
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
-            psbtInput.setSigHash(SigHash.ANYONECANPAY_ALL);
+            psbtInput.setSigHash(CoinjoinMath.INPUT_SIGHASH);
 
             if (wallet != null) {
                 Transaction utxoTx = wallet.getTransactions().get(utxo.getHash()).getTransaction();
@@ -347,41 +341,23 @@ public class CoinjoinHandler {
     }
 
     private boolean validateOutputs(Transaction tx, List<String> expectedAddresses) {
-        long estimatedTxSize = 150L * numPeers;
-        long totalFee = feeRate * estimatedTxSize;
-        long feePerOutput = totalFee / numPeers;
-        long expectedOutputAmount = poolAmountSats - feePerOutput;
+        long expectedOutputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers);
 
-        Set<String> foundAddresses = new HashSet<>();
-
+        List<CoinjoinMath.OutputView> views = new ArrayList<>();
         for (TransactionOutput output : tx.getOutputs()) {
             try {
-                Address outputAddr = output.getScript().getToAddress();
-                String addrStr = outputAddr.toString();
-                if (expectedAddresses.contains(addrStr)) {
-                    if (output.getValue() != expectedOutputAmount) {
-                        logger.severe(
-                                "Output " + addrStr + " has incorrect amount: " + output.getValue() + " vs expected "
-                                        + expectedOutputAmount);
-                        return false;
-                    }
-                    foundAddresses.add(addrStr);
-                } else {
-                    logger.warning("Unrecognized output address in transaction: " + addrStr);
-                    return false;
-                }
+                String addrStr = output.getScript().getToAddress().toString();
+                views.add(new CoinjoinMath.OutputView(addrStr, output.getValue()));
             } catch (Exception e) {
                 logger.warning("Could not parse output address: " + e.getMessage());
             }
         }
 
-        if (foundAddresses.size() != expectedAddresses.size()) {
-            logger.severe("Missing output addresses. Found " + foundAddresses.size() + " vs expected "
-                    + expectedAddresses.size());
-            return false;
+        boolean valid = CoinjoinMath.validateOutputs(views, expectedAddresses, expectedOutputAmount);
+        if (!valid) {
+            logger.severe("Output validation failed against expected amount " + expectedOutputAmount);
         }
-
-        return true;
+        return valid;
     }
 
     private void signPSBT(PSBT psbt, BlockTransactionHashIndex utxo, WalletNode utxoNode, Wallet signingWallet) {
@@ -508,10 +484,7 @@ public class CoinjoinHandler {
                     }
                 }
 
-                long estimatedTxSize = 150L * numPeers;
-                long totalFee = feeRate * estimatedTxSize;
-                long feePerOutput = (numPeers > 0) ? totalFee / numPeers : 0;
-                long expectedOutputAmount = poolAmountSats - feePerOutput;
+                long expectedOutputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers);
 
                 Transaction tx = psbt.getTransaction();
                 for (TransactionOutput output : tx.getOutputs()) {
