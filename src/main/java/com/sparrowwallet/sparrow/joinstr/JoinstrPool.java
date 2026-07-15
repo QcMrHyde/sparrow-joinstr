@@ -132,7 +132,7 @@ public class JoinstrPool {
     }
 
     public int getParsedPeers() {
-        if (peers == null || peers.get().trim().isEmpty()) {
+        if (peers == null || peers.get() == null || peers.get().trim().isEmpty()) {
             return 0;
         }
         try {
