@@ -61,7 +61,12 @@ public class CoinjoinHandler {
     private NostrListener messageListener;
     private Runnable onReadyForInputCallback;
 
+    private final Object stateLock = new Object();
+    private final java.util.concurrent.atomic.AtomicBoolean finalizing = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private volatile boolean completed = false;
+
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
+    private final java.util.concurrent.ScheduledExecutorService timeoutExecutor = Executors.newSingleThreadScheduledExecutor();
 
     public CoinjoinHandler(Identity poolIdentity, JoinstrPool pool, Wallet wallet, Storage storage,
             Consumer<String> statusCallback) {
@@ -101,9 +106,35 @@ public class CoinjoinHandler {
 
         updateStatus("Output registered");
 
+        scheduleTimeout();
+
         sendOutputToPool(myOutputAddress);
 
         startListeningForMessages();
+    }
+
+    /**
+     * Abort the coinjoin if it has not completed by the pool timeout, so a stalled pool does not
+     * hang forever with the selected UTXO locked.
+     */
+    private void scheduleTimeout() {
+        long delaySeconds;
+        try {
+            delaySeconds = Long.parseLong(pool.getTimeout().trim()) - Instant.now().getEpochSecond();
+        } catch (Exception e) {
+            delaySeconds = 3600;
+        }
+        if (delaySeconds <= 0) {
+            delaySeconds = 3600;
+        }
+
+        timeoutExecutor.schedule(() -> {
+            if (!completed) {
+                logger.warning("Coinjoin timed out before completion");
+                updateStatus("Timed out");
+                stopListening();
+            }
+        }, delaySeconds, java.util.concurrent.TimeUnit.SECONDS);
     }
 
     private void sendOutputToPool(String address) {
@@ -179,12 +210,19 @@ public class CoinjoinHandler {
     private void handleOutputReceived(JoinstrMessage message) {
         try {
             String addressStr = message.getAddress();
+            if (addressStr == null) {
+                return;
+            }
 
-            if (addressStr != null && !outputAddresses.contains(addressStr)) {
-                try {
-                    Address.fromString(addressStr);
-                } catch (Exception e) {
-                    logger.warning("Received invalid output address: " + addressStr);
+            try {
+                Address.fromString(addressStr);
+            } catch (Exception e) {
+                logger.warning("Received invalid output address: " + addressStr);
+                return;
+            }
+
+            synchronized (stateLock) {
+                if (outputAddresses.contains(addressStr) || outputAddresses.size() >= numPeers) {
                     return;
                 }
 
@@ -306,7 +344,7 @@ public class CoinjoinHandler {
 
             long estimatedTxSize = 150L * numPeers;
             long totalFee = feeRate * estimatedTxSize;
-            long feePerOutput = totalFee / numPeers;
+            long feePerOutput = (numPeers > 0) ? totalFee / numPeers : 0;
             long outputAmount = poolAmountSats - feePerOutput;
 
             logger.info("Creating PSBT: pool=" + poolAmountSats + " sats, fee/output=" + feePerOutput + ", output="
@@ -496,8 +534,15 @@ public class CoinjoinHandler {
     private void handleInputReceived(JoinstrMessage message) {
         try {
             String psbtBase64 = message.getPsbt();
+            if (psbtBase64 == null) {
+                return;
+            }
 
-            if (psbtBase64 != null && !inputPSBTs.contains(psbtBase64)) {
+            synchronized (stateLock) {
+                if (inputPSBTs.contains(psbtBase64) || inputPSBTs.size() >= numPeers) {
+                    return;
+                }
+
                 PSBT psbt = new PSBT(Base64.decode(psbtBase64), false);
 
                 for (PSBTInput input : psbt.getPsbtInputs()) {
@@ -540,7 +585,7 @@ public class CoinjoinHandler {
 
                 logger.info("Received valid input " + inputPSBTs.size() + "/" + numPeers);
 
-                if (inputPSBTs.size() == numPeers) {
+                if (inputPSBTs.size() == numPeers && finalizing.compareAndSet(false, true)) {
                     logger.info("All inputs registered, finalizing coinjoin");
 
                     // Run finalization in background
@@ -732,6 +777,7 @@ public class CoinjoinHandler {
                 } catch (Exception e) {
                     logger.warning("Failed to save history: " + e.getMessage());
                 }
+                completed = true;
                 updateStatus("Complete");
                 pool.setStatus("Complete");
 
@@ -757,6 +803,7 @@ public class CoinjoinHandler {
             if (messageListener != null) {
                 messageListener.close();
             }
+            timeoutExecutor.shutdownNow();
             executorService.shutdown();
         } catch (Exception e) {
             logger.warning("Error stopping listener: " + e.getMessage());
