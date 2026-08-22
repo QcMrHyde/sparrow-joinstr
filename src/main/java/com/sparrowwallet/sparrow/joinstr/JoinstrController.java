@@ -207,7 +207,9 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
                     log.info("[Joinstr] Nostr connections routed through Tor SOCKS proxy {}:{}",
                             proxy.getHost(), proxy.getPort());
                 } else {
-                    log.warn("[Joinstr] Tor not ready after 90s — nostr connections may not be over Tor");
+                    log.warn("[Joinstr] Tor not ready after 90s, joinstr requests will be refused");
+                    javafx.application.Platform.runLater(() -> AppServices.showErrorDialog(
+                            "Tor Not Running", JoinstrTransport.NOT_READY));
                 }
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();

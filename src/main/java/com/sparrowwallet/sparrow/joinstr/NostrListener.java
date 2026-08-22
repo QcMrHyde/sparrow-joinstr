@@ -139,15 +139,9 @@ public class NostrListener implements AutoCloseable {
         }
 
         try {
-            if (AppServices.isTorRunning()) {
-                try {
-                    Client.getInstance().disconnect();
-                } catch (Exception e) {
-                    // Not yet connected, safe to ignore
-                }
-                TorUtils.changeIdentity(AppServices.getTorProxy());
+            if (!JoinstrTransport.newCircuit()) {
+                throw new IllegalStateException(JoinstrTransport.NOT_READY);
             }
-                TorUtils.logTorIp();
 
             // Send the payload as built. Re-picking keys here silently dropped any the caller
             // had not supplied, and turned every value into a string.
@@ -181,15 +175,9 @@ public class NostrListener implements AutoCloseable {
 
     private void connectAndSubscribe() {
         try {
-            if (AppServices.isTorRunning()) {
-                try {
-                    Client.getInstance().disconnect();
-                } catch (Exception e) {
-                    // Not yet connected, safe to ignore
-                }
-                TorUtils.changeIdentity(AppServices.getTorProxy());
+            if (!JoinstrTransport.newCircuit()) {
+                throw new IllegalStateException(JoinstrTransport.NOT_READY);
             }
-                TorUtils.logTorIp();
 
             client = Client.getInstance();
             DefaultRequestContext context = new DefaultRequestContext();
