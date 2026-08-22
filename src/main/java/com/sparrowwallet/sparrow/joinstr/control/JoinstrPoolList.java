@@ -23,6 +23,7 @@ import javafx.scene.control.Button;
 import javafx.scene.control.TableCell;
 import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
+import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
@@ -182,6 +183,10 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
+                            if(!pool.isJoinable()) {
+                                AppServices.showErrorDialog("Pool Not Supported", pool.getUnsupportedReason());
+                                return;
+                            }
                             Identity identity = Identity.generateRandomIdentity();
                             String pubkey = identity.getPublicKey().toString();
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
@@ -258,11 +263,23 @@ public class JoinstrPoolList extends VBox {
                     @Override
                     public void updateItem(Void item, boolean empty) {
                         super.updateItem(item, empty);
-                        if (empty) {
+                        if (empty || getIndex() < 0 || getIndex() >= getTableView().getItems().size()) {
                             setGraphic(null);
-                        } else {
-                            setGraphic(joinButton);
+                            return;
                         }
+
+                        JoinstrPool pool = getTableView().getItems().get(getIndex());
+                        boolean joinable = pool.isJoinable();
+
+                        // a pool this client cannot complete is still listed, so the reason is
+                        // visible, but joining it would only wait for a reply that never comes
+                        joinButton.setDisable(!joinable);
+                        joinButton.setTooltip(joinable ? null : new Tooltip(pool.getUnsupportedReason()));
+                        joinButton.setStyle(joinable
+                                ? "-fx-background-color: #2196F3; -fx-text-fill: white; -fx-cursor: hand;"
+                                : "-fx-background-color: #666666; -fx-text-fill: #cccccc;");
+
+                        setGraphic(joinButton);
                     }
                 };
             }
