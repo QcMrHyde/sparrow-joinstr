@@ -209,7 +209,13 @@ public class UtxoCircleDialog extends Dialog<Void> {
         double canvasHeight = 600;
         canvas.setPrefSize(canvasWidth, canvasHeight);
 
-        Map<BlockTransactionHashIndex, WalletNode> utxos = wallet.getWalletUtxos();
+        // frozen, immature and unconfirmed coins cannot take part, so do not offer them
+        Map<BlockTransactionHashIndex, WalletNode> utxos = new java.util.LinkedHashMap<>();
+        for (Map.Entry<BlockTransactionHashIndex, WalletNode> entry : wallet.getSpendableUtxos().entrySet()) {
+            if (entry.getKey().getHeight() > 0) {
+                utxos.put(entry.getKey(), entry.getValue());
+            }
+        }
 
         if (!utxos.isEmpty()) {
             long minAmount = utxos.keySet().stream().mapToLong(BlockTransactionHashIndex::getValue).min().orElse(0);

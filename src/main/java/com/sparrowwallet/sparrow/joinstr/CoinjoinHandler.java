@@ -247,14 +247,12 @@ public class CoinjoinHandler {
         // coinjoin exists to break, so log shapes rather than values.
         logger.info("Starting input registration");
 
-        long value = selectedUtxo.getValue();
-        long minAllowed = CoinjoinMath.minInputSats(poolAmountSats);
-        long maxAllowed = CoinjoinMath.maxInputSats(poolAmountSats);
-        if (!CoinjoinMath.isInputValueInRange(value, poolAmountSats)) {
-            Platform.runLater(() -> {
-                com.sparrowwallet.sparrow.AppServices.showErrorDialog("Invalid UTXO",
-                        "The selected UTXO has a value of " + value + " sats, which is outside the allowed range of "
-                                + minAllowed + " to " + maxAllowed + " sats.\n\nPlease select a different UTXO.");
+        String rejection = CoinjoinInput.rejectionReason(coinFacts(selectedUtxo, utxoNode), poolAmountSats,
+                CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers), dustLimit(), outputAddresses);
+        if (rejection != null) {
+            logger.warning("Refusing the selected UTXO for this pool");
+            FxDispatch.run(() -> {
+                com.sparrowwallet.sparrow.AppServices.showErrorDialog("Invalid UTXO", rejection);
                 if (onReadyForInputCallback != null) {
                     onReadyForInputCallback.run();
                 }
@@ -330,6 +328,40 @@ public class CoinjoinHandler {
         };
 
         executorService.submit(task);
+    }
+
+    /** Read the facts CoinjoinInput needs off the wallet. */
+    CoinjoinInput.Coin coinFacts(BlockTransactionHashIndex utxo, WalletNode utxoNode) {
+        boolean confirmed = utxo.getHeight() > 0;
+        boolean spendable = wallet == null || wallet.getSpendableUtxos().containsKey(utxo);
+        String address = null;
+        try {
+            if (utxoNode != null && utxoNode.getAddress() != null) {
+                address = utxoNode.getAddress().toString();
+            }
+        } catch (Exception e) {
+            // an address that cannot be derived cannot be compared against the pool's outputs
+        }
+
+        return new CoinjoinInput.Coin(utxo.getValue(), confirmed, spendable, address);
+    }
+
+    /**
+     * The dust threshold every output in this pool must clear. Peers can register any address
+     * type, so the floor follows the largest one present.
+     */
+    private long dustLimit() {
+        long limit = 0;
+        for (String address : outputAddresses) {
+            try {
+                limit = Math.max(limit, com.sparrowwallet.sparrow.wallet.PaymentController
+                        .getRecipientDustThreshold(Address.fromString(address)));
+            } catch (Exception e) {
+                // an unparseable address never reaches the output list, but do not let one stop
+                // the check for the others
+            }
+        }
+        return limit;
     }
 
     private PSBT createCoinjoinPSBT(BlockTransactionHashIndex utxo, WalletNode utxoNode) {
