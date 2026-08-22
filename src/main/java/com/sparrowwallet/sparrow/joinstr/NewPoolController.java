@@ -132,6 +132,10 @@ public class NewPoolController extends JoinstrFormController {
 
                 JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key,
                         joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
+                pool.setPoolId(joinstrEvent.id);
+                if (joinstrEvent.fee_rate != null) {
+                    pool.setFeeRate(joinstrEvent.fee_rate);
+                }
                 updatePoolStore(pool);
 
                 getJoinstrController().setSelectedPool(pool);
@@ -170,7 +174,7 @@ public class NewPoolController extends JoinstrFormController {
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, status -> {
                 javafx.application.Platform.runLater(() -> pool.setStatus(status));
             });
-            coinjoinHandler.setFeeRate(1);
+            coinjoinHandler.setFeeRate(pool.getParsedFeeRate());
 
             coinjoinHandler.setOnReadyForInputCallback(() -> {
                 showUtxoSelectionDialog(wallet);
@@ -179,15 +183,7 @@ public class NewPoolController extends JoinstrFormController {
             coinjoinHandler.startOutputPhase(myOutputAddress);
             logger.info("Pool creator started coinjoin flow with output: " + myOutputAddress);
 
-            Map<String, String> poolCredentials = new java.util.HashMap<>();
-            poolCredentials.put("id", pool.getPubkey());
-            poolCredentials.put("private_key", poolPrivateKey);
-            poolCredentials.put("relay", pool.getRelay());
-            poolCredentials.put("public_key", pool.getPubkey());
-            poolCredentials.put("peers", pool.getPeers());
-            poolCredentials.put("timeout", pool.getTimeout());
-
-            shareCredentials(poolIdentity, pool.getRelay(), poolCredentials);
+            shareCredentials(poolIdentity, pool.getRelay(), pool.toCredentials());
 
         } catch (Exception e) {
             logger.severe("Error starting creator coinjoin flow: " + e.getMessage());
@@ -245,7 +241,7 @@ public class NewPoolController extends JoinstrFormController {
 
     }
 
-    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, String> poolCredentials) {
+    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, Object> poolCredentials) {
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
 

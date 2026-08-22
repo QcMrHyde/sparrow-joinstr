@@ -32,11 +32,11 @@ public class NostrListener implements AutoCloseable {
     private final String relay;
     private Client client;
     private Consumer<String> messageHandler;
-    private final Map<String, String> poolCredentials;
+    private final Map<String, Object> poolCredentials;
     private static final ConsoleHandler consoleLogHandler = new ConsoleHandler();
     private transient Handler eventMessageHandler = null;
 
-    public NostrListener(Identity identity, String relay, Map<String, String> poolCredentials) {
+    public NostrListener(Identity identity, String relay, Map<String, Object> poolCredentials) {
         this.identity = identity;
         this.relay = relay;
         this.poolCredentials = poolCredentials;
@@ -140,14 +140,6 @@ public class NostrListener implements AutoCloseable {
         }
 
         try {
-            Gson gson = new Gson();
-            Map<String, Object> credentialsMap = new LinkedHashMap<>();
-            credentialsMap.put("id", poolCredentials.get("id"));
-            credentialsMap.put("public_key", poolCredentials.get("public_key"));
-            credentialsMap.put("denomination", poolCredentials.get("denomination"));
-            credentialsMap.put("peers", poolCredentials.get("peers"));
-            credentialsMap.put("timeout", poolCredentials.get("timeout"));
-
             if (AppServices.isTorRunning()) {
                 try {
                     Client.getInstance().disconnect();
@@ -158,10 +150,9 @@ public class NostrListener implements AutoCloseable {
             }
                 TorUtils.logTorIp();
 
-            credentialsMap.put("relay", poolCredentials.get("relay"));
-            credentialsMap.put("private_key", poolCredentials.get("private_key"));
-            credentialsMap.put("fee_rate", poolCredentials.get("fee_rate"));
-            String credentialsJson = gson.toJson(credentialsMap);
+            // Send the payload as built. Re-picking keys here silently dropped any the caller
+            // had not supplied, and turned every value into a string.
+            String credentialsJson = new Gson().toJson(poolCredentials);
 
             List<BaseTag> tags = new ArrayList<>();
             tags.add(new PubKeyTag(new PublicKey(requesterPubkey)));
