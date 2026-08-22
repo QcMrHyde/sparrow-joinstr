@@ -48,6 +48,74 @@ public class JoinPoolHandler {
         return feeRate >= lo && feeRate <= hi;
     }
 
+    /**
+     * Why the credentials do not belong to this pool, or null if they do.
+     *
+     * The private key inside them must be the key of the pool that was joined, which nobody but
+     * its creator holds, and every term must match what that pool advertised.
+     */
+    static String credentialsRejectionReason(JoinstrMessage credentials, JoinstrPool pool) {
+        if (pool == null) {
+            return "no pool to check against";
+        }
+
+        String derived;
+        try {
+            derived = Identity.create(credentials.getPrivateKey()).getPublicKey().toString();
+        } catch (Exception e) {
+            return "private key is not a nostr key";
+        }
+
+        if (!derived.equals(pool.getPubkey())) {
+            return "private key is not the key of this pool";
+        }
+
+        String announcedId = pool.getPoolId();
+        if (announcedId != null && !announcedId.isEmpty() && !announcedId.equals(credentials.getId())) {
+            return "id does not match the announcement";
+        }
+
+        if (credentials.getDenomination() == null
+                || sats(credentials.getDenomination()) != denominationSats(pool)) {
+            return "denomination does not match the announcement";
+        }
+
+        if (credentials.getPeers() == null || credentials.getPeers() != pool.getParsedPeers()) {
+            return "peers does not match the announcement";
+        }
+
+        Long announcedTimeout = parseTimeout(pool.getTimeout());
+        if (credentials.getTimeout() == null || !credentials.getTimeout().equals(announcedTimeout)) {
+            return "timeout does not match the announcement";
+        }
+
+        if (credentials.getRelay() == null || !credentials.getRelay().equals(pool.getRelay())) {
+            return "relay does not match the announcement";
+        }
+
+        return null;
+    }
+
+    private static long sats(double denominationBtc) {
+        return Math.round(denominationBtc * 100000000d);
+    }
+
+    private static long denominationSats(JoinstrPool pool) {
+        try {
+            return CoinjoinMath.denominationToSats(pool.getDenomination());
+        } catch (Exception e) {
+            return -1;
+        }
+    }
+
+    private static Long parseTimeout(String timeout) {
+        try {
+            return Long.parseLong(timeout.trim());
+        } catch (Exception e) {
+            return null;
+        }
+    }
+
     public JoinPoolHandler(Identity joinIdentity, JoinstrPool pool, Consumer<String> statusCallback) {
         this.joinIdentity = joinIdentity;
         this.pool = pool;
@@ -66,10 +134,28 @@ public class JoinPoolHandler {
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
         credentialsListener.startListening(decryptedMessage -> {
-            JoinstrMessage message = JoinstrMessage.fromJson(decryptedMessage);
-            if (message.getPrivateKey() != null) {
-                handleCredentialsReceived(message);
+            JoinstrMessage message;
+            try {
+                message = JoinstrMessage.fromJson(decryptedMessage);
+            } catch (Exception e) {
+                logger.warning("Ignoring unparseable message while waiting for credentials");
+                return;
             }
+
+            if (message == null || message.getPrivateKey() == null) {
+                return;
+            }
+
+            String rejection = credentialsRejectionReason(message, pool);
+            if (rejection != null) {
+                // nip 04 does not authenticate the sender and this key is public on the relay from
+                // the moment the join request is published, so anyone can answer it. Keep waiting
+                // for the pool that was actually chosen instead of taking the first reply.
+                logger.warning("Ignoring credentials that did not come from the pool joined: " + rejection);
+                return;
+            }
+
+            handleCredentialsReceived(message);
         });
     }
 
