@@ -91,7 +91,7 @@ public class CoinjoinHandler {
         try {
             Address.fromString(myOutputAddress);
         } catch (Exception e) {
-            logger.severe("Invalid address: " + myOutputAddress);
+            logger.severe("Own output address is not a valid bitcoin address");
             updateStatus("Error: Invalid address");
             return;
         }
@@ -175,7 +175,7 @@ public class CoinjoinHandler {
 
                 nip04.send(Map.of("default", relay));
 
-                logger.info("Output registered: " + address);
+                logger.info("Output registered");
             } catch (Exception e) {
                 logger.severe("Failed to send output: " + e.getMessage());
                 updateStatus("Error: Check logs");
@@ -188,7 +188,7 @@ public class CoinjoinHandler {
         messageListener.startListening(this::handleDecryptedMessage);
     }
 
-    private void handleDecryptedMessage(String decryptedMessage) {
+    void handleDecryptedMessage(String decryptedMessage) {
         try {
             JoinstrMessage message = JoinstrMessage.fromJson(decryptedMessage);
             String type = message.getType();
@@ -213,7 +213,7 @@ public class CoinjoinHandler {
             try {
                 Address.fromString(addressStr);
             } catch (Exception e) {
-                logger.warning("Received invalid output address: " + addressStr);
+                logger.warning("Ignoring an output that is not a valid bitcoin address");
                 return;
             }
 
@@ -224,13 +224,13 @@ public class CoinjoinHandler {
 
                 outputAddresses.add(addressStr);
                 pool.setConnectedPeers(outputAddresses.size());
-                logger.info("Received output " + outputAddresses.size() + "/" + numPeers + ": " + addressStr);
+                logger.info("Received output " + outputAddresses.size() + "/" + numPeers);
 
                 if (outputAddresses.size() == numPeers) {
                     logger.info("All outputs registered, ready for input registration");
                     updateStatus("Input registration");
                     if (onReadyForInputCallback != null) {
-                        Platform.runLater(onReadyForInputCallback);
+                        FxDispatch.run(onReadyForInputCallback);
                     }
                 }
             }
@@ -243,8 +243,9 @@ public class CoinjoinHandler {
      * Start input phase - create and sign PSBT with selected UTXO.
      */
     public void startInputPhase(BlockTransactionHashIndex selectedUtxo, WalletNode utxoNode) {
-        logger.info("UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() +
-                ", value=" + selectedUtxo.getValue() + " sats");
+        // The outpoint alongside the registered outputs is the input to output linkage this
+        // coinjoin exists to break, so log shapes rather than values.
+        logger.info("Starting input registration");
 
         long value = selectedUtxo.getValue();
         long minAllowed = CoinjoinMath.minInputSats(poolAmountSats);
@@ -346,7 +347,7 @@ public class CoinjoinHandler {
 
             List<String> sortedOutputs = new ArrayList<>(outputAddresses);
             Collections.sort(sortedOutputs);
-            logger.info("Sorted " + sortedOutputs.size() + " output addresses for deterministic ordering");
+            logger.info("Sorted " + sortedOutputs.size() + " outputs for deterministic ordering");
 
             for (String addr : sortedOutputs) {
                 Address address = Address.fromString(addr);
@@ -407,12 +408,12 @@ public class CoinjoinHandler {
                 return;
             }
 
-            logger.info("Signing PSBT with : " + utxoNode.getDerivationPath());
+            logger.info("Signing the registration PSBT");
 
             com.sparrowwallet.drongo.crypto.ECKey privateKey = keystore.getKey(utxoNode);
 
             if (privateKey == null || !privateKey.hasPrivKey()) {
-                logger.severe("Could not get private key for: " + utxoNode.getDerivationPath());
+                logger.severe("Could not get the private key for the selected UTXO");
                 updateStatus("Error: Check logs");
                 return;
             }
@@ -524,7 +525,7 @@ public class CoinjoinHandler {
                 for (PSBTInput input : psbt.getPsbtInputs()) {
                     String outpoint = input.getInput().getOutpoint().toString();
                     if (allInputs.contains(outpoint)) {
-                        logger.warning("Rejecting duplicate input: " + outpoint);
+                        logger.warning("Rejecting a PSBT that reuses an already registered input");
                         return;
                     }
                 }
@@ -537,13 +538,13 @@ public class CoinjoinHandler {
                         Address outputAddr = output.getScript().getToAddress();
                         String addrStr = outputAddr.toString();
                         if (!outputAddresses.contains(addrStr)) {
-                            logger.warning("Rejecting PSBT with incorrect output address: " + outputAddr);
+                            logger.warning("Rejecting a PSBT paying an output the pool did not register");
                             return;
                         }
 
                         if (output.getValue() != expectedOutputAmount) {
-                            logger.warning("Rejecting PSBT with incorrect output amount for " + addrStr + ": "
-                                    + output.getValue() + " vs expected " + expectedOutputAmount);
+                            logger.warning("Rejecting a PSBT with an output amount of "
+                                    + output.getValue() + " sats, expected " + expectedOutputAmount);
                             return;
                         }
                     } catch (Exception e) {
@@ -785,7 +786,7 @@ public class CoinjoinHandler {
 
     private void updateStatus(String status) {
         if (statusCallback != null) {
-            Platform.runLater(() -> statusCallback.accept(status));
+            FxDispatch.run(() -> statusCallback.accept(status));
         }
     }
 

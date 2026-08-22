@@ -181,7 +181,7 @@ public class NewPoolController extends JoinstrFormController {
             });
 
             coinjoinHandler.startOutputPhase(myOutputAddress);
-            logger.info("Pool creator started coinjoin flow with output: " + myOutputAddress);
+            logger.info("Pool creator started coinjoin flow");
 
             shareCredentials(poolIdentity, pool.getRelay(), pool.toCredentials());
 
@@ -211,8 +211,7 @@ public class NewPoolController extends JoinstrFormController {
                         .getWalletUtxos();
                 com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
 
-                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
-                        + selectedUtxo.getValue());
+                logger.info("UTXO selected for the coinjoin");
 
                 coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
             } else {

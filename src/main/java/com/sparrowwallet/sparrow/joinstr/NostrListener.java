@@ -107,8 +107,7 @@ public class NostrListener implements AutoCloseable {
                 return;
             }
 
-            logger.info("Received encrypted DM from: " + senderPubkey + " to: " + recipientPubkey);
-            logger.info("Time: " + new Date(timestamp * 1000));
+            logger.fine("Received an encrypted DM addressed to this key");
 
             try {
                 String decryptedContent = NIP04.decrypt(
