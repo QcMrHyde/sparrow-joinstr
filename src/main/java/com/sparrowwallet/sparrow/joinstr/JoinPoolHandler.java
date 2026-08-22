@@ -49,6 +49,73 @@ public class JoinPoolHandler {
     }
 
     /**
+     * Handle one decrypted message received while waiting for credentials. This is what the relay
+     * listener calls for every message addressed to the joiner's throwaway key.
+     */
+    void onDecryptedMessage(String decryptedMessage) {
+        JoinstrMessage message;
+        try {
+            message = JoinstrMessage.fromJson(decryptedMessage);
+        } catch (Exception e) {
+            logger.warning("Ignoring unparseable message while waiting for credentials");
+            return;
+        }
+
+        if (message == null) {
+            return;
+        }
+
+        if ("reject".equals(message.getType())) {
+            handleRejected(message);
+            return;
+        }
+
+        if (message.getPrivateKey() == null) {
+            return;
+        }
+
+        String rejection = credentialsRejectionReason(message, pool);
+        if (rejection != null) {
+            // nip 04 does not authenticate the sender and this key is public on the relay from
+            // the moment the join request is published, so anyone can answer it. Keep waiting
+            // for the pool that was actually chosen instead of taking the first reply.
+            logger.warning("Ignoring credentials that did not come from the pool joined: " + rejection);
+            return;
+        }
+
+        handleCredentialsReceived(message);
+    }
+
+    /** A readable explanation for a reject sent by a pool creator. */
+    static String rejectionMessage(JoinstrMessage reject) {
+        String reason = reject.getReason();
+        if (reason == null || reason.trim().isEmpty()) {
+            return "The pool creator rejected your request.";
+        }
+
+        String detail = switch (reason) {
+            case "missing_proof" -> "An aut-ct proof is required to join this pool.";
+            case "invalid_proof" -> "The provided aut-ct proof could not be verified.";
+            case "duplicate_token" -> "The aut-ct token has already been used.";
+            default -> reason;
+        };
+
+        return "The pool creator rejected your request: " + detail;
+    }
+
+    private void handleRejected(JoinstrMessage reject) {
+        if (!rejected.compareAndSet(false, true)) {
+            return;
+        }
+
+        String message = rejectionMessage(reject);
+        logger.warning(message);
+        FxDispatch.run(() -> statusCallback.accept("Rejected"));
+        FxDispatch.run(() -> errorDialog.accept(message));
+        stop();
+    }
+
+    /**
      * Why the credentials do not belong to this pool, or null if they do.
      *
      * The private key inside them must be the key of the pool that was joined, which nobody but
@@ -129,40 +196,19 @@ public class JoinPoolHandler {
      * Start listening for credentials after sending join request
      */
     public void startListeningForCredentials() {
-        Platform.runLater(() -> statusCallback.accept("Waiting for credentials"));
+        FxDispatch.run(() -> statusCallback.accept("Waiting for credentials"));
 
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-        credentialsListener.startListening(decryptedMessage -> {
-            JoinstrMessage message;
-            try {
-                message = JoinstrMessage.fromJson(decryptedMessage);
-            } catch (Exception e) {
-                logger.warning("Ignoring unparseable message while waiting for credentials");
-                return;
-            }
-
-            if (message == null || message.getPrivateKey() == null) {
-                return;
-            }
-
-            String rejection = credentialsRejectionReason(message, pool);
-            if (rejection != null) {
-                // nip 04 does not authenticate the sender and this key is public on the relay from
-                // the moment the join request is published, so anyone can answer it. Keep waiting
-                // for the pool that was actually chosen instead of taking the first reply.
-                logger.warning("Ignoring credentials that did not come from the pool joined: " + rejection);
-                return;
-            }
-
-            handleCredentialsReceived(message);
-        });
+        credentialsListener.startListening(this::onDecryptedMessage);
     }
 
     /**
      * Handle received pool credentials
      */
     private final AtomicBoolean credentialsReceived = new AtomicBoolean(false);
+    private final AtomicBoolean rejected = new AtomicBoolean(false);
+    private Consumer<String> errorDialog = message -> AppServices.showErrorDialog("Join Request Rejected", message);
 
     private void handleCredentialsReceived(JoinstrMessage message) {
         if (!credentialsReceived.compareAndSet(false, true)) {
@@ -200,7 +246,7 @@ public class JoinPoolHandler {
                 logger.warning("Error stopping credentials listener: " + e.getMessage());
             }
 
-            Platform.runLater(() -> statusCallback.accept("Credentials received"));
+            FxDispatch.run(() -> statusCallback.accept("Credentials received"));
 
             double advertisedFeeRate = pool.getParsedFeeRate();
             double credentialsFeeRate = (message.getFeeRate() != null) ? message.getFeeRate() : advertisedFeeRate;
@@ -209,7 +255,7 @@ public class JoinPoolHandler {
                 logger.severe("Rejecting pool: fee rate " + credentialsFeeRate
                         + " sat/vB is outside the accepted range for advertised " + advertisedFeeRate
                         + " sat/vB (absolute max " + MAX_FEE_RATE + ")");
-                Platform.runLater(() -> statusCallback.accept("Error: Fee rate out of range"));
+                FxDispatch.run(() -> statusCallback.accept("Error: Fee rate out of range"));
                 stop();
                 return;
             }
@@ -222,7 +268,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error processing credentials: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error " + e.getMessage()));
+            FxDispatch.run(() -> statusCallback.accept("Error " + e.getMessage()));
         }
     }
 
@@ -238,7 +284,7 @@ public class JoinPoolHandler {
             Map.Entry<com.sparrowwallet.drongo.wallet.Wallet, Storage> selectedWallet = selectWallet(openWallets);
             if (selectedWallet == null) {
                 logger.warning("No wallet selected for coinjoin");
-                Platform.runLater(() -> statusCallback.accept("Error: No wallet selected"));
+                FxDispatch.run(() -> statusCallback.accept("Error: No wallet selected"));
                 return;
             }
             com.sparrowwallet.drongo.wallet.Wallet wallet = selectedWallet.getKey();
@@ -262,7 +308,7 @@ public class JoinPoolHandler {
         } catch (Exception e) {
             logger.severe("Error starting coinjoin flow: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
+            FxDispatch.run(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
@@ -288,7 +334,7 @@ public class JoinPoolHandler {
         if (Platform.isFxApplicationThread()) {
             task.run();
         } else {
-            Platform.runLater(task);
+            FxDispatch.run(task);
         }
         return task.get();
     }
@@ -302,12 +348,16 @@ public class JoinPoolHandler {
             coinjoinHandler.startInputPhase(utxo, utxoNode);
         } else {
             logger.severe("CoinjoinHandler not initialized");
-            Platform.runLater(() -> statusCallback.accept("Error: Handler not ready"));
+            FxDispatch.run(() -> statusCallback.accept("Error: Handler not ready"));
         }
     }
 
     public boolean isReadyForInputPhase() {
         return coinjoinHandler != null && coinjoinHandler.isReadyForInputPhase();
+    }
+
+    void setErrorDialog(Consumer<String> errorDialog) {
+        this.errorDialog = errorDialog;
     }
 
     public CoinjoinHandler getCoinjoinHandler() {
@@ -354,19 +404,19 @@ public class JoinPoolHandler {
 
                 if (confirm.isEmpty() || confirm.get() != ButtonType.OK) {
                     logger.info("User cancelled coinjoin input confirmation");
-                    Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
+                    FxDispatch.run(() -> statusCallback.accept("Input registration cancelled"));
                     return;
                 }
 
                 coinjoinHandler.startInputPhase(selectedUtxo, utxoNode);
             } else {
                 logger.warning("No UTXO selected, input registration cancelled");
-                Platform.runLater(() -> statusCallback.accept("Input registration cancelled"));
+                FxDispatch.run(() -> statusCallback.accept("Input registration cancelled"));
             }
         } catch (Exception e) {
             logger.severe("Error showing UTXO dialog: " + e.getMessage());
             e.printStackTrace();
-            Platform.runLater(() -> statusCallback.accept("Error: " + e.getMessage()));
+            FxDispatch.run(() -> statusCallback.accept("Error: " + e.getMessage()));
         }
     }
 
