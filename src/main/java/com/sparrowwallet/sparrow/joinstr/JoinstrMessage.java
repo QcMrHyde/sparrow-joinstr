@@ -8,7 +8,7 @@ public class JoinstrMessage {
     private String psbt;
     private String id;
     private String private_key;
-    private Long fee_rate;
+    private Double fee_rate;
 
     public String getType() {
         return type;
@@ -50,11 +50,11 @@ public class JoinstrMessage {
         this.private_key = private_key;
     }
 
-    public Long getFeeRate() {
+    public Double getFeeRate() {
         return fee_rate;
     }
 
-    public void setFeeRate(Long fee_rate) {
+    public void setFeeRate(Double fee_rate) {
         this.fee_rate = fee_rate;
     }
 

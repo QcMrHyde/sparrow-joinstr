@@ -22,8 +22,8 @@ public class JoinPoolHandler {
     private static final Logger logger = Logger.getLogger(JoinPoolHandler.class.getName());
 
     /** Absolute bounds on an accepted pool fee rate (sat/vB). */
-    static final long MIN_FEE_RATE = 1;
-    static final long MAX_FEE_RATE = 100;
+    static final double MIN_FEE_RATE = 1;
+    static final double MAX_FEE_RATE = 100;
 
     private Identity joinIdentity;
     private JoinstrPool pool;
@@ -31,7 +31,7 @@ public class JoinPoolHandler {
     private NostrListener credentialsListener;
     private Identity poolIdentity;
     private int numPeers;
-    private long feeRate = 1;
+    private double feeRate = 1;
     private Consumer<String> statusCallback;
     private CoinjoinHandler coinjoinHandler;
 
@@ -39,9 +39,12 @@ public class JoinPoolHandler {
      * Accept a fee rate that stays within a tolerance band of the advertised rate (it may drift
      * between pool creation and the coinjoin) and within the absolute [MIN_FEE_RATE, MAX_FEE_RATE] range.
      */
-    static boolean isFeeRateAcceptable(long feeRate, long advertisedFeeRate) {
-        long lo = Math.max(MIN_FEE_RATE, advertisedFeeRate / 2);
-        long hi = Math.min(MAX_FEE_RATE, advertisedFeeRate * 2);
+    static boolean isFeeRateAcceptable(double feeRate, double advertisedFeeRate) {
+        if (!Double.isFinite(feeRate) || !Double.isFinite(advertisedFeeRate)) {
+            return false;
+        }
+        double lo = Math.max(MIN_FEE_RATE, advertisedFeeRate / 2);
+        double hi = Math.min(MAX_FEE_RATE, advertisedFeeRate * 2);
         return feeRate >= lo && feeRate <= hi;
     }
 
@@ -113,8 +116,8 @@ public class JoinPoolHandler {
 
             Platform.runLater(() -> statusCallback.accept("Credentials received"));
 
-            long advertisedFeeRate = pool.getParsedFeeRate();
-            long credentialsFeeRate = (message.getFeeRate() != null) ? message.getFeeRate() : advertisedFeeRate;
+            double advertisedFeeRate = pool.getParsedFeeRate();
+            double credentialsFeeRate = (message.getFeeRate() != null) ? message.getFeeRate() : advertisedFeeRate;
 
             if (!isFeeRateAcceptable(credentialsFeeRate, advertisedFeeRate)) {
                 logger.severe("Rejecting pool: fee rate " + credentialsFeeRate
@@ -140,7 +143,7 @@ public class JoinPoolHandler {
     /**
      * Start the coinjoin flow using CoinjoinHandler
      */
-    private void startCoinjoinFlow(long feeRate) {
+    private void startCoinjoinFlow(double feeRate) {
         try {
             Map<com.sparrowwallet.drongo.wallet.Wallet, Storage> openWallets = AppServices.get().getOpenWallets();
             if (openWallets.isEmpty()) {
@@ -251,15 +254,15 @@ public class JoinPoolHandler {
                 logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
                         + selectedUtxo.getValue());
 
-                long feePerOutput = feeRate * 150;
-                long outputAmount = poolAmountSats - feePerOutput;
+                long outputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate,
+                        coinjoinHandler.getNumPeers());
                 long myFee = selectedUtxo.getValue() - outputAmount;
 
                 java.util.Optional<ButtonType> confirm = AppServices.showAlertDialog(
                         "Confirm Coinjoin Input",
                         "Input: " + selectedUtxo.getValue() + " sats\n" +
                                 "Output: " + outputAmount + " sats\n" +
-                                "Fee: " + myFee + " sats (" + feeRate + " sat/vB)\n\n" +
+                                "Fee: " + myFee + " sats (" + CoinjoinMath.formatFeeRate(feeRate) + " sat/vB)\n\n" +
                                 "Proceed with signing?",
                         Alert.AlertType.CONFIRMATION, ButtonType.CANCEL, ButtonType.OK);
 

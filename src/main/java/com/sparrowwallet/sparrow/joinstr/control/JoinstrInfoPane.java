@@ -87,7 +87,7 @@ public class JoinstrInfoPane extends VBox {
             relayValueLabel.setText(pool.getRelay());
             pubkeyValueLabel.setText(pool.getPubkey());
             denominationValueLabel.setText(pool.getDenomination());
-            feeRateValueLabel.setText(pool.getParsedFeeRate() + " sat/vB");
+            feeRateValueLabel.setText(com.sparrowwallet.sparrow.joinstr.CoinjoinMath.formatFeeRate(pool.getParsedFeeRate()) + " sat/vB");
             statusValueLabel.textProperty().bind(pool.statusProperty());
         } else {
             clearPoolInfo();

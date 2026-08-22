@@ -41,7 +41,7 @@ public class JoinstrMessageTest {
         JoinstrMessage message = new JoinstrMessage();
         message.setType("credentials");
         message.setPrivateKey("deadbeef");
-        message.setFeeRate(5L);
+        message.setFeeRate(5.0);
 
         String json = message.toJson();
 
@@ -59,7 +59,29 @@ public class JoinstrMessageTest {
 
         assertEquals("credentials", parsed.getType());
         assertEquals("deadbeef", parsed.getPrivateKey());
-        assertEquals(7L, parsed.getFeeRate());
+        assertEquals(7.0, parsed.getFeeRate());
+    }
+
+    /**
+     * The electrum plugin derives fee_rate from its own estimator (fee_per_kb / 1000), so the
+     * value on the wire is usually fractional. Parsing it must not throw.
+     */
+    @Test
+    public void parsesFractionalFeeRate() {
+        String json = "{\"type\":\"credentials\",\"private_key\":\"deadbeef\",\"fee_rate\":2.5}";
+
+        JoinstrMessage parsed = JoinstrMessage.fromJson(json);
+
+        assertEquals(2.5, parsed.getFeeRate());
+        assertEquals("deadbeef", parsed.getPrivateKey());
+    }
+
+    @Test
+    public void parsesWholeFeeRateWrittenAsDecimal() {
+        JoinstrMessage parsed = JoinstrMessage.fromJson(
+                "{\"type\":\"credentials\",\"private_key\":\"deadbeef\",\"fee_rate\":3.0}");
+
+        assertEquals(3.0, parsed.getFeeRate());
     }
 
     @Test

@@ -53,14 +53,26 @@ public final class CoinjoinMath {
         return value >= minInputSats(poolAmountSats) && value <= maxInputSats(poolAmountSats);
     }
 
-    public static long feePerOutput(long feeRate, int numPeers) {
+    public static long feePerOutput(double feeRate, int numPeers) {
+        if (numPeers <= 0) {
+            return 0;
+        }
         long estimatedTxSize = ESTIMATED_VSIZE_PER_PEER * numPeers;
-        long totalFee = feeRate * estimatedTxSize;
-        return numPeers > 0 ? totalFee / numPeers : 0;
+        long totalFee = (long) (feeRate * estimatedTxSize);
+        return totalFee / numPeers;
     }
 
-    public static long outputAmount(long poolAmountSats, long feeRate, int numPeers) {
+    public static long outputAmount(long poolAmountSats, double feeRate, int numPeers) {
         return poolAmountSats - feePerOutput(feeRate, numPeers);
+    }
+
+    /** Render a fee rate without a trailing ".0" when it is a whole number of sat/vB. */
+    public static String formatFeeRate(double feeRate) {
+        if (feeRate == Math.rint(feeRate) && Double.isFinite(feeRate)) {
+            return String.valueOf((long) feeRate);
+        }
+        return new java.math.BigDecimal(feeRate).setScale(2, java.math.RoundingMode.HALF_UP)
+                .stripTrailingZeros().toPlainString();
     }
 
     /** An output reduced to the two fields coinjoin validation cares about. */

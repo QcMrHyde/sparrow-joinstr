@@ -49,6 +49,31 @@ public class FeeRateValidationTest {
     }
 
     @Test
+    public void poolParsesFractionalAdvertisedFeeRate() {
+        JoinstrPool pool = new JoinstrPool("wss://nos.lol", "pk", "0.01", "3", "0");
+        pool.setFeeRate("2.5");
+        assertEquals(2.5, pool.getParsedFeeRate());
+        // a whole rate written as a decimal is what the electrum plugin usually publishes
+        pool.setFeeRate("3.0");
+        assertEquals(3.0, pool.getParsedFeeRate());
+    }
+
+    @Test
+    public void fractionalRatesAreComparedAgainstTheAdvertisedBand() {
+        assertTrue(JoinPoolHandler.isFeeRateAcceptable(3.0, 2.5));
+        assertTrue(JoinPoolHandler.isFeeRateAcceptable(2.5, 2.5));
+        assertFalse(JoinPoolHandler.isFeeRateAcceptable(5.1, 2.5));
+        // the advertised rate no longer collapses to 1, so a normal pool is not refused
+        assertTrue(JoinPoolHandler.isFeeRateAcceptable(3.0, 3.0));
+    }
+
+    @Test
+    public void nonFiniteRatesAreRefused() {
+        assertFalse(JoinPoolHandler.isFeeRateAcceptable(Double.NaN, 4));
+        assertFalse(JoinPoolHandler.isFeeRateAcceptable(4, Double.POSITIVE_INFINITY));
+    }
+
+    @Test
     public void poolFeeRateDefaultsOnMalformedValue() {
         JoinstrPool pool = new JoinstrPool("wss://nos.lol", "pk", "0.01", "3", "0");
         pool.setFeeRate("abc");
@@ -57,5 +82,15 @@ public class FeeRateValidationTest {
         assertEquals(1, pool.getParsedFeeRate());
         pool.setFeeRate(null);
         assertEquals(1, pool.getParsedFeeRate());
+        pool.setFeeRate("0");
+        assertEquals(1, pool.getParsedFeeRate());
+        pool.setFeeRate("-4");
+        assertEquals(1, pool.getParsedFeeRate());
+    }
+
+    @Test
+    public void feeRateIsRenderedWithoutATrailingZero() {
+        assertEquals("3", CoinjoinMath.formatFeeRate(3.0));
+        assertEquals("2.5", CoinjoinMath.formatFeeRate(2.5));
     }
 }
