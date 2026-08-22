@@ -200,7 +200,7 @@ public class JoinPoolHandler {
 
         credentialsListener = new NostrListener(joinIdentity, relay, null);
 
-        credentialsListener.startListening(this::onDecryptedMessage);
+        credentialsListener.startListening((message, createdAt) -> onDecryptedMessage(message));
     }
 
     /**

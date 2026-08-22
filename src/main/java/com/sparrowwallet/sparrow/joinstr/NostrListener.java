@@ -23,7 +23,7 @@ import java.util.logging.ConsoleHandler;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import java.util.logging.Handler;
-import java.util.function.Consumer;
+import java.util.function.BiConsumer;
 
 public class NostrListener implements AutoCloseable {
     private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
@@ -31,7 +31,7 @@ public class NostrListener implements AutoCloseable {
     private final Identity identity;
     private final String relay;
     private Client client;
-    private Consumer<String> messageHandler;
+    private BiConsumer<String, Long> messageHandler;
     private final Map<String, Object> poolCredentials;
     private static final ConsoleHandler consoleLogHandler = new ConsoleHandler();
     private transient Handler eventMessageHandler = null;
@@ -52,7 +52,7 @@ public class NostrListener implements AutoCloseable {
         }
     }
 
-    public void startListening(Consumer<String> messageHandler) {
+    public void startListening(BiConsumer<String, Long> messageHandler) {
         this.messageHandler = messageHandler;
         setupEventHandler();
         connectAndSubscribe();
@@ -122,7 +122,7 @@ public class NostrListener implements AutoCloseable {
                 }
 
                 if (messageHandler != null) {
-                    messageHandler.accept(decryptedContent);
+                    messageHandler.accept(decryptedContent, timestamp);
                 }
 
                 logger.info("Successfully decrypted message");
