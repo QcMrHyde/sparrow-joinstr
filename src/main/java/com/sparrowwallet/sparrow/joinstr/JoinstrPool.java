@@ -90,12 +90,20 @@ public class JoinstrPool {
         this.feeRate = feeRate;
     }
 
-    public long getParsedFeeRate() {
+    /**
+      * The advertised fee rate in sat/vB. Pools publish it as a JSON number, which other joinstr
+      * clients derive from their own estimator and so is usually fractional.
+      */
+    public double getParsedFeeRate() {
         try {
             if (feeRate == null || feeRate.trim().isEmpty()) {
                 return 1;
             }
-            return Long.parseLong(feeRate.trim());
+            double parsed = Double.parseDouble(feeRate.trim());
+            if (!Double.isFinite(parsed) || parsed <= 0) {
+                return 1;
+            }
+            return parsed;
         } catch (Exception e) {
             return 1;
         }

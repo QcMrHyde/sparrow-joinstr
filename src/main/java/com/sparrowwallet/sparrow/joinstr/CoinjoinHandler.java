@@ -45,7 +45,7 @@ public class CoinjoinHandler {
     private final String relay;
     private final int numPeers;
     private final long poolAmountSats;
-    private long feeRate;
+    private double feeRate;
     private final Consumer<String> statusCallback;
 
     private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
@@ -80,7 +80,7 @@ public class CoinjoinHandler {
         this.poolAmountSats = CoinjoinMath.denominationToSats(pool.getDenomination());
     }
 
-    public void setFeeRate(long feeRate) {
+    public void setFeeRate(double feeRate) {
         this.feeRate = feeRate;
     }
 
