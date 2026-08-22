@@ -115,7 +115,9 @@ public class NostrListener implements AutoCloseable {
                         encryptedContent,
                         new PublicKey(senderPubkey));
 
-                if (decryptedContent.contains("\"type\": \"join_pool\"") && poolCredentials != null) {
+                // matching the raw text depended on the sender's json whitespace, so a peer
+                // serialising compactly was never answered
+                if (poolCredentials != null && JoinstrMessage.isJoinRequest(decryptedContent)) {
                     handleJoinRequest(senderPubkey);
                 }
 

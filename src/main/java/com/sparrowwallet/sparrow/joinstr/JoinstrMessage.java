@@ -3,6 +3,10 @@ package com.sparrowwallet.sparrow.joinstr;
 import java.util.Map;
 
 public class JoinstrMessage {
+    /** Every payload in NIP.md carries this. */
+    public static final String VERSION = "1";
+
+    private String version;
     private String type;
     private String address;
     private String psbt;
@@ -15,6 +19,32 @@ public class JoinstrMessage {
     private Long timeout;
     private String relay;
     private String reason;
+
+    public String getVersion() {
+        return version;
+    }
+
+    public void setVersion(String version) {
+        this.version = version;
+    }
+
+    /** A message this client sends, stamped with the protocol version. */
+    public static JoinstrMessage of(String type) {
+        JoinstrMessage message = new JoinstrMessage();
+        message.setVersion(VERSION);
+        message.setType(type);
+        return message;
+    }
+
+    /** Whether a decrypted payload is a request to join a pool. */
+    public static boolean isJoinRequest(String decryptedContent) {
+        try {
+            JoinstrMessage message = fromJson(decryptedContent);
+            return message != null && "join_pool".equals(message.getType());
+        } catch (Exception e) {
+            return false;
+        }
+    }
 
     public String getType() {
         return type;
