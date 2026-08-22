@@ -192,6 +192,10 @@ public class OtherPoolsController extends JoinstrFormController {
                                                 pool.setFeeRate(poolData.get("fee_rate").asText());
                                             }
 
+                                            if (poolData.has("id")) {
+                                                pool.setPoolId(poolData.get("id").asText());
+                                            }
+
                                             if (pools.stream().noneMatch(
                                                     (p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
                                                     myPools.stream().noneMatch(

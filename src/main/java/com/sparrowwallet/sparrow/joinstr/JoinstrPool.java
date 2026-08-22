@@ -27,6 +27,7 @@ public class JoinstrPool {
     private final SimpleStringProperty status;
     private final javafx.beans.property.SimpleIntegerProperty connectedPeers;
     private String privateKey;
+    private String poolId = "";
     private String feeRate = "1";
     private JoinPoolHandler handler;
 
@@ -76,6 +77,50 @@ public class JoinstrPool {
 
     public String getPrivateKey() {
         return privateKey;
+    }
+
+    /** The pool id from the announcement, which peers echo back in the credentials. */
+    public String getPoolId() {
+        return poolId;
+    }
+
+    public void setPoolId(String poolId) {
+        this.poolId = poolId == null ? "" : poolId;
+    }
+
+    /**
+     * The credentials a joiner is sent. Every field the pool announced is repeated here with the
+     * same type, because a joiner checks the credentials against the announcement it chose before
+     * trusting the private key inside them.
+     */
+    public Map<String, Object> toCredentials() {
+        Map<String, Object> credentials = new LinkedHashMap<>();
+        credentials.put("id", poolId);
+        credentials.put("public_key", getPubkey());
+        credentials.put("denomination", asNumber(getDenomination(), 0d));
+        credentials.put("peers", getParsedPeers());
+        credentials.put("timeout", asLong(getTimeout()));
+        credentials.put("relay", getRelay());
+        credentials.put("fee_rate", getParsedFeeRate());
+        credentials.put("private_key", privateKey);
+        return credentials;
+    }
+
+    private static double asNumber(String value, double fallback) {
+        try {
+            double parsed = Double.parseDouble(value.trim());
+            return Double.isFinite(parsed) ? parsed : fallback;
+        } catch (Exception e) {
+            return fallback;
+        }
+    }
+
+    private static long asLong(String value) {
+        try {
+            return Long.parseLong(value.trim());
+        } catch (Exception e) {
+            return 0;
+        }
     }
 
     public void setPrivateKey(String privateKey) {
@@ -280,6 +325,7 @@ public class JoinstrPool {
         private final String timeout;
         private final String status;
         private final String privateKey;
+        private final String poolId;
         private final String feeRate;
 
         public JoinstrPoolData(JoinstrPool joinstrPool) {
@@ -290,6 +336,7 @@ public class JoinstrPool {
             this.timeout = joinstrPool.getTimeout();
             this.status = joinstrPool.getStatus();
             this.privateKey = joinstrPool.getPrivateKey();
+            this.poolId = joinstrPool.getPoolId();
             this.feeRate = joinstrPool.getFeeRate();
         }
 
@@ -298,6 +345,7 @@ public class JoinstrPool {
             if (feeRate != null) {
                 pool.setFeeRate(feeRate);
             }
+            pool.setPoolId(poolId);
             return pool;
         }
     }
