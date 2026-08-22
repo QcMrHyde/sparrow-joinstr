@@ -88,6 +88,12 @@ public final class CoinjoinMath {
         Set<String> expected = new HashSet<>(expectedAddresses);
         Set<String> found = new HashSet<>();
 
+        // comparing sets alone lets a duplicated output through, because the extra payment is to an
+        // address that is expected and the set of addresses seen still matches
+        if (outputs.size() != expected.size()) {
+            return false;
+        }
+
         for (OutputView output : outputs) {
             if (!expected.contains(output.address())) {
                 return false;
