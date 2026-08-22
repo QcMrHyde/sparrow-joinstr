@@ -14,6 +14,7 @@ public class JoinstrMessage {
     private Integer peers;
     private Long timeout;
     private String relay;
+    private String reason;
 
     public String getType() {
         return type;
@@ -93,6 +94,14 @@ public class JoinstrMessage {
 
     public void setRelay(String relay) {
         this.relay = relay;
+    }
+
+    public String getReason() {
+        return reason;
+    }
+
+    public void setReason(String reason) {
+        this.reason = reason;
     }
 
     public Double getFeeRate() {
