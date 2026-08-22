@@ -9,6 +9,11 @@ public class JoinstrMessage {
     private String id;
     private String private_key;
     private Double fee_rate;
+    private String public_key;
+    private Double denomination;
+    private Integer peers;
+    private Long timeout;
+    private String relay;
 
     public String getType() {
         return type;
@@ -48,6 +53,46 @@ public class JoinstrMessage {
 
     public void setPrivateKey(String private_key) {
         this.private_key = private_key;
+    }
+
+    public String getPublicKey() {
+        return public_key;
+    }
+
+    public void setPublicKey(String public_key) {
+        this.public_key = public_key;
+    }
+
+    public Double getDenomination() {
+        return denomination;
+    }
+
+    public void setDenomination(Double denomination) {
+        this.denomination = denomination;
+    }
+
+    public Integer getPeers() {
+        return peers;
+    }
+
+    public void setPeers(Integer peers) {
+        this.peers = peers;
+    }
+
+    public Long getTimeout() {
+        return timeout;
+    }
+
+    public void setTimeout(Long timeout) {
+        this.timeout = timeout;
+    }
+
+    public String getRelay() {
+        return relay;
+    }
+
+    public void setRelay(String relay) {
+        this.relay = relay;
     }
 
     public Double getFeeRate() {
