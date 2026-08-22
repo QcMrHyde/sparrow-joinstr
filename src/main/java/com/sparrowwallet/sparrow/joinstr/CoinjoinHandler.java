@@ -694,26 +694,20 @@ public class CoinjoinHandler {
                         ", hasFinalWitness=" + (input.getFinalScriptWitness() != null));
             }
 
-            long totalInputValue = 0;
-            for (PSBTInput input : combinedPsbt.getPsbtInputs()) {
-                if (input.getWitnessUtxo() != null) {
-                    totalInputValue += input.getWitnessUtxo().getValue();
-                }
-            }
+            long expectedOutputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers);
+            boolean enforceFeeBounds = com.sparrowwallet.drongo.Network.get()
+                    != com.sparrowwallet.drongo.Network.REGTEST;
 
-            Transaction finalTx = combinedPsbt.extractTransaction();
-
-            if (!validateOutputs(finalTx, outputAddresses)) {
+            String rejection = CoinjoinTransaction.rejectionReason(combinedPsbt, outputAddresses,
+                    expectedOutputAmount, numPeers, enforceFeeBounds);
+            if (rejection != null) {
+                logger.severe("Refusing to broadcast the coinjoin: " + rejection);
                 updateStatus("Error: Check logs");
                 return;
             }
 
-            long totalOutputValue = 0;
-            for (TransactionOutput output : finalTx.getOutputs()) {
-                totalOutputValue += output.getValue();
-            }
-
-            long fee = totalInputValue - totalOutputValue;
+            Transaction finalTx = combinedPsbt.extractTransaction();
+            long fee = CoinjoinTransaction.fee(combinedPsbt);
             logger.info("Final transaction: txid=" + finalTx.getTxId() + ", fee=" + fee + " sats");
 
             updateStatus("broadcast");
