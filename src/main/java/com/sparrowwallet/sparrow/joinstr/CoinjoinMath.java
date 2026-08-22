@@ -20,8 +20,13 @@ public final class CoinjoinMath {
     public static final long MAX_UTXO_MARGIN = 5000;
     /** Inputs are signed with SIGHASH_ALL | SIGHASH_ANYONECANPAY (0x81) per the joinstr NIP. */
     public static final SigHash INPUT_SIGHASH = SigHash.ANYONECANPAY_ALL;
-    /** Rough vsize charged per peer (one input + one output) when estimating the fee. */
-    private static final long ESTIMATED_VSIZE_PER_PEER = 150L;
+    /**
+     * Vsize charged per peer (one input plus one output) when estimating the fee. Every client in a
+     * pool must use the same figure or they derive different output amounts and reject each other's
+     * registration PSBTs. This matches the reference implementation, which estimates the whole
+     * transaction at 100 vB per output.
+     */
+    private static final long ESTIMATED_VSIZE_PER_PEER = 100L;
 
     private CoinjoinMath() {
     }
