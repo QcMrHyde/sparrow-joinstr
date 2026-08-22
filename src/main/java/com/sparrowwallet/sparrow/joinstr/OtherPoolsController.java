@@ -229,9 +229,10 @@ public class OtherPoolsController extends JoinstrFormController {
 
                 Identity identity = Identity.generateRandomIdentity();
 
+                // Pools are dropped by their own timeout below, so do not also drop them by the
+                // age of the announcement. A pool open for longer than an hour was invisible.
                 Filters filters = Filters.builder()
                         .kinds(List.of(Kind.CONJOIN_POOL))
-                        .since(System.currentTimeMillis() / 1000 - 3600) // Last hour
                         .build();
 
                 String subId = "pools-" + System.currentTimeMillis();
