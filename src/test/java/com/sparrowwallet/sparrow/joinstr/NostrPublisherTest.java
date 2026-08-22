@@ -16,7 +16,7 @@ public class NostrPublisherTest {
 
     private GenericEvent event(Identity poolIdentity) {
         return NostrPublisher.buildPoolEvent(poolIdentity, "0123456789abcdef", "regtest", "0.001", "3",
-                1750000000L, "wss://nos.lol");
+                1750000000L, "wss://nos.lol", 1);
     }
 
     @Test

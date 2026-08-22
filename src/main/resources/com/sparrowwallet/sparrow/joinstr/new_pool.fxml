@@ -39,6 +39,20 @@
                     <Field text="Number of Peers:" style="-fx-text-fill: #aaaaaa;">
                         <TextField fx:id="peersField" styleClass="textfield-dark" style="-fx-max-width: 200px;" />
                     </Field>
+                    <Field text="Fee Rate (sat/vB):" style="-fx-text-fill: #aaaaaa;">
+                        <TextField fx:id="feeRateField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
+                            <tooltip>
+                                <Tooltip text="Fee rate advertised to peers, defaults to the wallet's estimate"/>
+                            </tooltip>
+                        </TextField>
+                    </Field>
+                    <Field text="Timeout (minutes):" style="-fx-text-fill: #aaaaaa;">
+                        <TextField fx:id="timeoutField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
+                            <tooltip>
+                                <Tooltip text="How long the pool stays open for peers to join"/>
+                            </tooltip>
+                        </TextField>
+                    </Field>
                     <Field>
                         <VBox alignment="CENTER">
                             <ToggleButton fx:id="createButton" text="Create" onAction="#handleCreateButton"

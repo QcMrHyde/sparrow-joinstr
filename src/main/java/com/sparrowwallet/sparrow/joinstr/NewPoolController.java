@@ -37,8 +37,19 @@ public class NewPoolController extends JoinstrFormController {
     @FXML
     private TextField peersField;
 
+    @FXML
+    private TextField feeRateField;
+
+    @FXML
+    private TextField timeoutField;
+
     @Override
     public void initializeView() {
+        Double defaultFeeRate = AppServices.getDefaultFeeRate();
+        if(defaultFeeRate != null) {
+            feeRateField.setPromptText(CoinjoinMath.formatFeeRate(defaultFeeRate));
+        }
+        timeoutField.setPromptText(String.valueOf(PoolParameters.DEFAULT_TIMEOUT_MINUTES));
     }
 
     @Override
@@ -86,6 +97,29 @@ public class NewPoolController extends JoinstrFormController {
                 return;
             }
 
+            String feeRateText = feeRateField.getText().trim();
+            String timeoutText = timeoutField.getText().trim();
+
+            String feeRateError = PoolParameters.feeRateError(feeRateText);
+            if(feeRateError != null) {
+                showError(feeRateError);
+                return;
+            }
+
+            String timeoutError = PoolParameters.timeoutError(timeoutText);
+            if(timeoutError != null) {
+                showError(timeoutError);
+                return;
+            }
+
+            Double defaultFeeRate = AppServices.getDefaultFeeRate();
+            double feeRate = PoolParameters.feeRateOrDefault(feeRateText,
+                    defaultFeeRate == null ? PoolParameters.MIN_FEE_RATE
+                            : Math.min(Math.max(defaultFeeRate, PoolParameters.MIN_FEE_RATE),
+                                    PoolParameters.MAX_FEE_RATE));
+            long timeoutSeconds = PoolParameters.timeoutSeconds(timeoutText,
+                    PoolParameters.DEFAULT_TIMEOUT_MINUTES);
+
             Address bitcoinAddress;
             Wallet wallet;
 
@@ -120,7 +154,8 @@ public class NewPoolController extends JoinstrFormController {
                             + recipientDustThreshold + ")");
                 }
 
-                event = nostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString());
+                event = nostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString(),
+                        feeRate, timeoutSeconds);
 
                 if (event == null) {
                     showError("Failed to publish pool event");
@@ -150,6 +185,8 @@ public class NewPoolController extends JoinstrFormController {
 
             denominationField.clear();
             peersField.clear();
+            feeRateField.clear();
+            timeoutField.clear();
 
             showSuccessDialog(
                     "New Pool",
