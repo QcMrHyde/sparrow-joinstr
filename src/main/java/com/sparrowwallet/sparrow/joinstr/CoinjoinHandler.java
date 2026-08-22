@@ -539,24 +539,11 @@ public class CoinjoinHandler {
 
                 long expectedOutputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate, numPeers);
 
-                Transaction tx = psbt.getTransaction();
-                for (TransactionOutput output : tx.getOutputs()) {
-                    try {
-                        Address outputAddr = output.getScript().getToAddress();
-                        String addrStr = outputAddr.toString();
-                        if (!outputAddresses.contains(addrStr)) {
-                            logger.warning("Rejecting a PSBT paying an output the pool did not register");
-                            return;
-                        }
-
-                        if (output.getValue() != expectedOutputAmount) {
-                            logger.warning("Rejecting a PSBT with an output amount of "
-                                    + output.getValue() + " sats, expected " + expectedOutputAmount);
-                            return;
-                        }
-                    } catch (Exception e) {
-                        // Not an address output, continue
-                    }
+                String rejection = RegistrationPsbt.rejectionReason(psbt, outputAddresses,
+                        expectedOutputAmount, numPeers);
+                if (rejection != null) {
+                    logger.warning("Rejecting a peer registration: " + rejection);
+                    return;
                 }
 
                 inputPSBTs.add(psbtBase64);
