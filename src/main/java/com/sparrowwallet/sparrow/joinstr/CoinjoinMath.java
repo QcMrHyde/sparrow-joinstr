@@ -66,6 +66,19 @@ public final class CoinjoinMath {
         return poolAmountSats - feePerOutput(feeRate, numPeers);
     }
 
+    /**
+     * Whether a registration PSBT would stand on its own as a valid transaction.
+     *
+     * These are signed with SIGHASH_ALL | SIGHASH_ANYONECANPAY so that the other peers' inputs can
+     * be added later, which also means anyone who reads one off the relay can broadcast it as it
+     * stands. It has to stay insolvent by itself: if the single input already covered every
+     * output, whoever broadcast it would keep the difference.
+     */
+    public static boolean isSpendableAlone(long inputSats, long outputAmount, int outputCount) {
+        long totalOut = outputAmount * (long) outputCount;
+        return totalOut < inputSats;
+    }
+
     /** Render a fee rate without a trailing ".0" when it is a whole number of sat/vB. */
     public static String formatFeeRate(double feeRate) {
         if (feeRate == Math.rint(feeRate) && Double.isFinite(feeRate)) {

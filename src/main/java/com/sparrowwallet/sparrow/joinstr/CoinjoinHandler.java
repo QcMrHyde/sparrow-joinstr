@@ -354,6 +354,13 @@ public class CoinjoinHandler {
                 tx.addOutput(outputAmount, address.getOutputScript());
             }
 
+            if (CoinjoinMath.isSpendableAlone(utxo.getValue(), outputAmount, sortedOutputs.size())) {
+                logger.severe("Refusing to sign a registration PSBT that is spendable on its own: "
+                        + sortedOutputs.size() + " outputs of " + outputAmount
+                        + " sats do not exceed the input of " + utxo.getValue() + " sats");
+                return null;
+            }
+
             PSBT psbt = new PSBT(tx);
 
             PSBTInput psbtInput = psbt.getPsbtInputs().get(0);
