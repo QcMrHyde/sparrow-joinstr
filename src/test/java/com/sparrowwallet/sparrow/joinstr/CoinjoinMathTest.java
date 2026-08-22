@@ -98,6 +98,45 @@ public class CoinjoinMathTest {
         assertEquals(0L, CoinjoinMath.feePerOutput(5, 0));
     }
 
+    // --- registration PSBT must not stand alone ---
+
+    /**
+     * A registration PSBT is published to the pool signed with SIGHASH_ALL | SIGHASH_ANYONECANPAY,
+     * so any relay observer can broadcast it. If the single input already covered every output,
+     * they would keep the difference.
+     */
+    @Test
+    public void aNormalRegistrationIsNotSpendableAlone() {
+        long pool = 100_000L;
+        long output = CoinjoinMath.outputAmount(pool, 1, 3);
+
+        // the joiner contributes pool + margin and the outputs total three shares
+        assertFalse(CoinjoinMath.isSpendableAlone(pool + 500, output, 3));
+        assertFalse(CoinjoinMath.isSpendableAlone(pool + 5000, output, 2));
+    }
+
+    @Test
+    public void oneOutputSmallerThanTheInputIsSpendableAlone() {
+        long pool = 100_000L;
+        long output = CoinjoinMath.outputAmount(pool, 1, 1);
+
+        assertTrue(CoinjoinMath.isSpendableAlone(pool + 5000, output, 1));
+    }
+
+    @Test
+    public void outputsEqualToTheInputAreNotSpendableAlone() {
+        // the reference implementation refuses only when the outputs are strictly less than the
+        // input, so an exactly balanced transaction with no fee is not treated as a giveaway
+        assertFalse(CoinjoinMath.isSpendableAlone(200_000L, 100_000L, 2));
+        assertTrue(CoinjoinMath.isSpendableAlone(200_001L, 100_000L, 2));
+    }
+
+    @Test
+    public void aLargeInputAgainstSmallOutputsIsSpendableAlone() {
+        // an oversized input is the case the guard exists for
+        assertTrue(CoinjoinMath.isSpendableAlone(10_000_000L, 99_900L, 3));
+    }
+
     // --- sighash flag (mirrors py-joinstr test_sighash) ---
 
     @Test
