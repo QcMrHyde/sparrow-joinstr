@@ -136,15 +136,10 @@ public class CoinjoinHandler {
     private void sendOutputToPool(String address) {
         executorService.submit(() -> {
             try {
-                if (AppServices.isTorRunning()) {
-                    try {
-                        Client.getInstance().disconnect();
-                    } catch (Exception e) {
-                        // Not yet connected, safe to ignore
-                    }
-                    TorUtils.changeIdentity(AppServices.getTorProxy());
+                if (!JoinstrTransport.newCircuit()) {
+                    updateStatus("Error: Tor not running");
+                    return;
                 }
-                    TorUtils.logTorIp();
 
                 JoinstrMessage message = new JoinstrMessage();
                 message.setType("output");
@@ -166,7 +161,7 @@ public class CoinjoinHandler {
                 nip04.setEvent(outputEvent);
                 nip04.sign();
 
-                if (AppServices.isTorRunning()) {
+                {
                     DefaultRequestContext context = new DefaultRequestContext();
                     context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
                     context.setRelays(Map.of("default", relay));
@@ -501,15 +496,10 @@ public class CoinjoinHandler {
 
     private void sendInputToPool(String psbtBase64) {
         try {
-            if (AppServices.isTorRunning()) {
-                try {
-                    Client.getInstance().disconnect();
-                } catch (Exception e) {
-                    // Not yet connected, safe to ignore
-                }
-                TorUtils.changeIdentity(AppServices.getTorProxy());
+            if (!JoinstrTransport.newCircuit()) {
+                updateStatus("Error: Tor not running");
+                return;
             }
-                TorUtils.logTorIp();
 
             JoinstrMessage message = new JoinstrMessage();
             message.setType("input");
@@ -531,7 +521,7 @@ public class CoinjoinHandler {
             nip04.setEvent(inputEvent);
             nip04.sign();
 
-            if (AppServices.isTorRunning()) {
+            {
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
                 context.setRelays(Map.of("default", relay));

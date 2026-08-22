@@ -59,15 +59,10 @@ public class NostrPublisher implements AutoCloseable {
 
         Identity poolIdentity;
         try {
-            if (AppServices.isTorRunning()) {
-                try {
-                    Client.getInstance().disconnect();
-                } catch (Exception e) {
-                    // Not yet connected, safe to ignore
-                }
-                TorUtils.changeIdentity(AppServices.getTorProxy());
+            if (!JoinstrTransport.newCircuit()) {
+                AppServices.showErrorDialog("Tor Not Running", JoinstrTransport.NOT_READY);
+                return null;
             }
-                TorUtils.logTorIp();
 
             poolIdentity = Identity.generateRandomIdentity();
             poolPrivateKey = poolIdentity.getPrivateKey().toString();
@@ -87,7 +82,7 @@ public class NostrPublisher implements AutoCloseable {
             nip01.setEvent(event);
             nip01.sign();
 
-            if (AppServices.isTorRunning()) {
+            {
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
                 context.setRelays(relays);

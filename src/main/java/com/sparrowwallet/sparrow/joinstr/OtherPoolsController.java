@@ -245,15 +245,10 @@ public class OtherPoolsController extends JoinstrFormController {
                         JoinstrRelay.relayOrDefault(Config.get().getNostrRelay())));
 
                 try {
-                    if (AppServices.isTorRunning()) {
-                        try {
-                            Client.getInstance().disconnect();
-                        } catch (Exception e) {
-                            // Not yet connected, safe to ignore
-                        }
-                        TorUtils.changeIdentity(AppServices.getTorProxy());
+                    if (!JoinstrTransport.newCircuit()) {
+                        Platform.runLater(() -> showError(JoinstrTransport.NOT_READY));
+                        return;
                     }
-                        TorUtils.logTorIp();
 
                     client.connect(context);
                     client.send(reqMessage);

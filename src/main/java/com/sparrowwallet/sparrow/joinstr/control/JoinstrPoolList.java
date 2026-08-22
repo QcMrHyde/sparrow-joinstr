@@ -1,6 +1,7 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
+import com.sparrowwallet.sparrow.joinstr.JoinstrTransport;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
 import javafx.beans.property.SimpleStringProperty;
@@ -188,15 +189,12 @@ public class JoinstrPoolList extends VBox {
 
                             new Thread(() -> {
                                 try {
-                                    if(AppServices.isTorRunning()) {
-                                        try {
-                                            Client.getInstance().disconnect();
-                                        } catch (Exception e) {
-                                            // Not yet connected, safe to ignore
-                                        }
-                                        TorUtils.changeIdentity(AppServices.getTorProxy());
+                                    if(!JoinstrTransport.newCircuit()) {
+                                        javafx.application.Platform.runLater(() ->
+                                                AppServices.showErrorDialog("Tor Not Running",
+                                                        JoinstrTransport.NOT_READY));
+                                        return;
                                     }
-                                        TorUtils.logTorIp();
 
                                     PublicKey poolPubKey = new PublicKey(pool.getPubkey());
                                     String requestContent = "{\"type\": \"join_pool\"}";
@@ -215,7 +213,7 @@ public class JoinstrPoolList extends VBox {
                                     nip04.setEvent(encrypted_event);
                                     nip04.sign();
 
-                                    if(AppServices.isTorRunning()) {
+                                    {
                                         DefaultRequestContext context = new DefaultRequestContext();
                                         context.setPrivateKey(identity.getPrivateKey().getRawData());
                                         context.setRelays(Map.of("default", pool.getRelay()));
