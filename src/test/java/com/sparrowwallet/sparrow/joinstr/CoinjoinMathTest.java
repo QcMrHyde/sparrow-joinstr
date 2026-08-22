@@ -60,11 +60,36 @@ public class CoinjoinMathTest {
     @Test
     public void outputAmountSubtractsFee() {
         long pool = 100_000L;
-        // feeRate 1 sat/vB, 150 vB per peer -> 150 sats fee per output regardless of peer count
-        assertEquals(150L, CoinjoinMath.feePerOutput(1, 3));
-        assertEquals(150L, CoinjoinMath.feePerOutput(1, 5));
-        assertEquals(pool - 150L, CoinjoinMath.outputAmount(pool, 1, 3));
-        assertEquals(pool - 1500L, CoinjoinMath.outputAmount(pool, 10, 3));
+        // feeRate 1 sat/vB, 100 vB per peer, so 100 sats per output regardless of peer count
+        assertEquals(100L, CoinjoinMath.feePerOutput(1, 3));
+        assertEquals(100L, CoinjoinMath.feePerOutput(1, 5));
+        assertEquals(pool - 100L, CoinjoinMath.outputAmount(pool, 1, 3));
+        assertEquals(pool - 1000L, CoinjoinMath.outputAmount(pool, 10, 3));
+    }
+
+    /**
+     * The per-output fee has to match what other joinstr clients derive, or the output amounts
+     * differ and every registration PSBT is rejected on both sides. The reference implementation
+     * computes int(fee_rate * 100 * output_ct) // output_ct.
+     */
+    @Test
+    public void feePerOutputMatchesTheReferenceEstimate() {
+        for(int peers = 2; peers <= 10; peers++) {
+            for(long rate : new long[] {1, 2, 5, 13, 100}) {
+                long reference = (rate * 100L * peers) / peers;
+                assertEquals(reference, CoinjoinMath.feePerOutput(rate, peers),
+                        "rate=" + rate + " peers=" + peers);
+            }
+        }
+    }
+
+    @Test
+    public void outputAmountIsIndependentOfPeerCount() {
+        long pool = 250_000L;
+        long expected = CoinjoinMath.outputAmount(pool, 4, 2);
+        for(int peers = 2; peers <= 8; peers++) {
+            assertEquals(expected, CoinjoinMath.outputAmount(pool, 4, peers));
+        }
     }
 
     @Test
