@@ -88,6 +88,28 @@ public final class CoinjoinMath {
                 .stripTrailingZeros().toPlainString();
     }
 
+    /**
+     * The per output fee for the recovery transaction.
+     *
+     * Recovery signs a fresh transaction with every input and output known up front, so the size
+     * is estimated properly rather than at a flat rate per peer: 100 vB per output, 68 vB per
+     * input and 100 vB of overhead. This mirrors the reference implementation, which uses the
+     * same figures, so both clients arrive at the same output amount.
+     */
+    public static long recoveryFeePerOutput(double feeRate, int outputCount, int inputCount) {
+        if (outputCount <= 0) {
+            return 0;
+        }
+        long estimatedVsize = 100L * outputCount + 68L * inputCount + 100L;
+        long estimatedFee = (long) (feeRate * estimatedVsize);
+        return estimatedFee / outputCount;
+    }
+
+    public static long recoveryOutputAmount(long poolAmountSats, double feeRate, int outputCount,
+            int inputCount) {
+        return poolAmountSats - recoveryFeePerOutput(feeRate, outputCount, inputCount);
+    }
+
     /** An output reduced to the two fields coinjoin validation cares about. */
     public record OutputView(String address, long value) {
     }
