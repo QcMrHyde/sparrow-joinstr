@@ -30,7 +30,6 @@ import java.util.logging.Logger;
 public class NostrPublisher implements AutoCloseable {
 
     private static final Logger logger = Logger.getLogger(NostrPublisher.class.getName());
-    private static final Identity SENDER = Identity.generateRandomIdentity();
 
     private String poolPrivateKey = "";
 
@@ -67,55 +66,26 @@ public class NostrPublisher implements AutoCloseable {
             }
                 TorUtils.logTorIp();
 
-            logger.info("Public key: " + SENDER.getPublicKey().toString());
-
             poolIdentity = Identity.generateRandomIdentity();
             poolPrivateKey = poolIdentity.getPrivateKey().toString();
 
             long timeout = Instant.now().getEpochSecond() + 3600;
 
-            List<BaseTag> tags = new ArrayList<>();
             String poolId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
             String relayUrl = RELAYS.values().iterator().next();
             String network = com.sparrowwallet.drongo.Network.get().getName();
-            String content = String.format(
-                    "{\n" +
-                            "  \"versions\": [\"1\"],\n" +
-                            "  \"type\": \"new_pool\",\n" +
-                            "  \"id\": \"%s\",\n" +
-                            "  \"network\": \"%s\",\n" +
-                            "  \"public_key\": \"%s\",\n" +
-                            "  \"denomination\": %s,\n" +
-                            "  \"peers\": %s,\n" +
-                            "  \"timeout\": %d,\n" +
-                            "  \"relays\": [\"%s\"],\n" +
-                            "  \"relay\": \"%s\",\n" +
-                            "  \"fee_rate\": 1,\n" +
-                            "  \"transport\": { \"tor\": { \"enable\": true }, \"vpn\": { \"enable\": false, \"vpn_gateway\": null } }\n" +
-                            "}",
-                    poolId,
-                    network,
-                    poolIdentity.getPublicKey().toString(),
-                    denomination,
-                    peers,
-                    timeout,
-                    relayUrl,
+
+            NIP01 nip01 = new NIP01(poolIdentity);
+
+            GenericEvent event = buildPoolEvent(poolIdentity, poolId, network, denomination, peers, timeout,
                     relayUrl);
-
-            NIP01 nip01 = new NIP01(SENDER);
-
-            GenericEvent event = new GenericEvent(
-                    SENDER.getPublicKey(),
-                    Kind.CONJOIN_POOL.getValue(),
-                    tags,
-                    content);
 
             nip01.setEvent(event);
             nip01.sign();
 
             if (AppServices.isTorRunning()) {
                 DefaultRequestContext context = new DefaultRequestContext();
-                context.setPrivateKey(SENDER.getPrivateKey().getRawData());
+                context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
                 context.setRelays(RELAYS);
                 Client.getInstance().connect(context);
             }
@@ -132,6 +102,46 @@ public class NostrPublisher implements AutoCloseable {
             e.printStackTrace();
             return null;
         }
+    }
+
+    /**
+     * Build the kind 2022 announcement. The event is authored by the pool key it advertises, which
+     * is what other joinstr clients check before accepting the pool.
+     */
+    static GenericEvent buildPoolEvent(Identity poolIdentity, String poolId, String network, String denomination,
+            String peers, long timeout, String relayUrl) {
+
+        String content = String.format(
+                "{\n" +
+                        "  \"versions\": [\"1\"],\n" +
+                        "  \"type\": \"new_pool\",\n" +
+                        "  \"id\": \"%s\",\n" +
+                        "  \"network\": \"%s\",\n" +
+                        "  \"public_key\": \"%s\",\n" +
+                        "  \"denomination\": %s,\n" +
+                        "  \"peers\": %s,\n" +
+                        "  \"timeout\": %d,\n" +
+                        "  \"relays\": [\"%s\"],\n" +
+                        "  \"relay\": \"%s\",\n" +
+                        "  \"fee_rate\": 1,\n" +
+                        "  \"transport\": { \"tor\": { \"enable\": true }, \"vpn\": { \"enable\": false, \"vpn_gateway\": null } }\n" +
+                        "}",
+                poolId,
+                network,
+                poolIdentity.getPublicKey().toString(),
+                denomination,
+                peers,
+                timeout,
+                relayUrl,
+                relayUrl);
+
+        List<BaseTag> tags = new ArrayList<>();
+
+        return new GenericEvent(
+                poolIdentity.getPublicKey(),
+                Kind.CONJOIN_POOL.getValue(),
+                tags,
+                content);
     }
 
     @Override
