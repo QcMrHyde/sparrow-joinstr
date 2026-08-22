@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
+import com.sparrowwallet.sparrow.joinstr.JoinstrMessage;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.joinstr.JoinstrTransport;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
@@ -202,7 +203,7 @@ public class JoinstrPoolList extends VBox {
                                     }
 
                                     PublicKey poolPubKey = new PublicKey(pool.getPubkey());
-                                    String requestContent = "{\"type\": \"join_pool\"}";
+                                    String requestContent = JoinstrMessage.of("join_pool").toJson();
                                     List<BaseTag> tags = new ArrayList<>();
                                     tags.add(new PubKeyTag(poolPubKey)); // Send to pool creator's pubkey
 

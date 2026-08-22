@@ -141,8 +141,7 @@ public class CoinjoinHandler {
                     return;
                 }
 
-                JoinstrMessage message = new JoinstrMessage();
-                message.setType("output");
+                JoinstrMessage message = JoinstrMessage.of("output");
                 message.setAddress(address);
                 String outputContent = message.toJson();
 
@@ -501,8 +500,7 @@ public class CoinjoinHandler {
                 return;
             }
 
-            JoinstrMessage message = new JoinstrMessage();
-            message.setType("input");
+            JoinstrMessage message = JoinstrMessage.of("input");
             message.setPsbt(psbtBase64);
             String inputContent = message.toJson();
 

@@ -109,6 +109,8 @@ public class JoinstrPool {
      */
     public Map<String, Object> toCredentials() {
         Map<String, Object> credentials = new LinkedHashMap<>();
+        credentials.put("version", JoinstrMessage.VERSION);
+        credentials.put("type", "credentials");
         credentials.put("id", poolId);
         credentials.put("public_key", getPubkey());
         credentials.put("denomination", asNumber(getDenomination(), 0d));
