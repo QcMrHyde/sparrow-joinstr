@@ -167,7 +167,7 @@ public class JoinstrPool {
     }
 
     public void setConnectedPeers(int count) {
-        javafx.application.Platform.runLater(() -> connectedPeers.set(count));
+        FxDispatch.run(() -> connectedPeers.set(count));
     }
 
     public javafx.beans.property.SimpleIntegerProperty connectedPeersProperty() {

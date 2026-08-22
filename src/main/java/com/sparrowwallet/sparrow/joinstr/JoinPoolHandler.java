@@ -303,7 +303,7 @@ public class JoinPoolHandler {
             });
 
             coinjoinHandler.startOutputPhase(myOutputAddress.toString());
-            logger.info("Started coinjoin flow with output address: " + myOutputAddress);
+            logger.info("Started coinjoin flow");
 
         } catch (Exception e) {
             logger.severe("Error starting coinjoin flow: " + e.getMessage());
@@ -387,8 +387,7 @@ public class JoinPoolHandler {
                         .getWalletUtxos();
                 com.sparrowwallet.drongo.wallet.WalletNode utxoNode = utxoMap.get(selectedUtxo);
 
-                logger.info("Selected UTXO: " + selectedUtxo.getHash() + ":" + selectedUtxo.getIndex() + " value="
-                        + selectedUtxo.getValue());
+                logger.info("UTXO selected for the coinjoin");
 
                 long outputAmount = CoinjoinMath.outputAmount(poolAmountSats, feeRate,
                         coinjoinHandler.getNumPeers());
