@@ -195,6 +195,12 @@ public class OtherPoolsController extends JoinstrFormController {
                                                 pool.setPoolId(poolData.get("id").asText());
                                             }
 
+                                            String unsupported = PoolSupport.unsupportedReason(poolData);
+                                            pool.setUnsupportedReason(unsupported);
+                                            if (unsupported != null) {
+                                                pool.setStatus("Unsupported");
+                                            }
+
                                             if (pools.stream().noneMatch(
                                                     (p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
                                                     myPools.stream().noneMatch(

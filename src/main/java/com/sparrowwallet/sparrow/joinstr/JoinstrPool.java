@@ -28,6 +28,7 @@ public class JoinstrPool {
     private final javafx.beans.property.SimpleIntegerProperty connectedPeers;
     private String privateKey;
     private String poolId = "";
+    private String unsupportedReason;
     private String feeRate = "1";
     private JoinPoolHandler handler;
 
@@ -77,6 +78,19 @@ public class JoinstrPool {
 
     public String getPrivateKey() {
         return privateKey;
+    }
+
+    /** Why this pool cannot be joined from Sparrow, or null if it can. */
+    public String getUnsupportedReason() {
+        return unsupportedReason;
+    }
+
+    public void setUnsupportedReason(String unsupportedReason) {
+        this.unsupportedReason = unsupportedReason;
+    }
+
+    public boolean isJoinable() {
+        return unsupportedReason == null;
     }
 
     /** The pool id from the announcement, which peers echo back in the credentials. */
