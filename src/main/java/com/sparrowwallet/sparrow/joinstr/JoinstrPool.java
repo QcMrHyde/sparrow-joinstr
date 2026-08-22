@@ -289,9 +289,8 @@ public class JoinstrPool {
         ArrayList<JoinstrPool> poolStore = Config.get().getPoolStore();
         JoinstrPool[] pools = poolStore.toArray(new JoinstrPool[0]);
         String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(pools));
-        try (FileWriter writer = new FileWriter(filePath)) {
-            writer.write(poolsJson);
-        }
+        // This file holds the private key of every pool, so it must not be world readable.
+        SecureFile.write(filePath, poolsJson);
 
     }
 
