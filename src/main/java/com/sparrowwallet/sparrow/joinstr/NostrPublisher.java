@@ -11,6 +11,7 @@ import com.sparrowwallet.drongo.KeyPurpose;
 import com.sparrowwallet.drongo.address.Address;
 import com.sparrowwallet.drongo.wallet.Wallet;
 import com.sparrowwallet.sparrow.wallet.WalletForm;
+import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.io.Storage;
 import com.sparrowwallet.sparrow.wallet.NodeEntry;
 import com.sparrowwallet.sparrow.EventManager;
@@ -37,8 +38,9 @@ public class NostrPublisher implements AutoCloseable {
         return poolPrivateKey;
     }
 
-    private static final Map<String, String> RELAYS = Map.of(
-            "nos", "wss://nos.lol");
+    private static Map<String, String> relays() {
+        return Map.of("default", JoinstrRelay.relayOrDefault(Config.get().getNostrRelay()));
+    }
 
     public Address getNewReceiveAddress(Storage storage, Wallet wallet) {
         WalletForm walletForm = new WalletForm(storage, wallet);
@@ -72,7 +74,8 @@ public class NostrPublisher implements AutoCloseable {
             long timeout = Instant.now().getEpochSecond() + 3600;
 
             String poolId = UUID.randomUUID().toString().replace("-", "").substring(0, 16);
-            String relayUrl = RELAYS.values().iterator().next();
+            Map<String, String> relays = relays();
+            String relayUrl = relays.values().iterator().next();
             String network = com.sparrowwallet.drongo.Network.get().getName();
 
             NIP01 nip01 = new NIP01(poolIdentity);
@@ -86,11 +89,11 @@ public class NostrPublisher implements AutoCloseable {
             if (AppServices.isTorRunning()) {
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-                context.setRelays(RELAYS);
+                context.setRelays(relays);
                 Client.getInstance().connect(context);
             }
 
-            nip01.send(RELAYS);
+            nip01.send(relays);
 
             logger.info("Event ID: " + event.getId());
             logger.info("Event: " + event);
