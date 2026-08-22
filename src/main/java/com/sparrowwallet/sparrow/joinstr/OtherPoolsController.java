@@ -31,7 +31,6 @@ public class OtherPoolsController extends JoinstrFormController {
 
     private static final int POOL_REFRESH_TIME = 30000;
     private static final Logger logger = Logger.getLogger(OtherPoolsController.class.getName());
-    private static final String DEFAULT_RELAY = "wss://nos.lol";
     private static final Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
 
     @FXML
@@ -241,7 +240,8 @@ public class OtherPoolsController extends JoinstrFormController {
                 Client client = Client.getInstance();
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(identity.getPrivateKey().getRawData());
-                context.setRelays(Map.of("default", DEFAULT_RELAY));
+                context.setRelays(Map.of("default",
+                        JoinstrRelay.relayOrDefault(Config.get().getNostrRelay())));
 
                 try {
                     if (AppServices.isTorRunning()) {
