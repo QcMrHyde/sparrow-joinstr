@@ -31,6 +31,7 @@ import org.bouncycastle.util.encoders.Base64;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -49,6 +50,7 @@ public class CoinjoinHandler {
     private final Consumer<String> statusCallback;
 
     private final List<String> outputAddresses = new CopyOnWriteArrayList<>();
+    private final Map<String, Long> outputTimes = new ConcurrentHashMap<>();
     private final List<String> inputPSBTs = new CopyOnWriteArrayList<>();
     private final Set<String> allInputs = Collections.synchronizedSet(new HashSet<>());
     private String myOutputAddress;
@@ -97,8 +99,6 @@ public class CoinjoinHandler {
         }
 
         this.myOutputAddress = myOutputAddress;
-        outputAddresses.add(myOutputAddress);
-        pool.setConnectedPeers(outputAddresses.size());
 
         updateStatus("Output registered");
 
@@ -169,6 +169,9 @@ public class CoinjoinHandler {
 
                 nip04.send(Map.of("default", relay));
 
+                Long createdAt = outputEvent.getCreatedAt();
+                recordOutput(address, createdAt == null ? Instant.now().getEpochSecond() : createdAt);
+
                 logger.info("Output registered");
             } catch (Exception e) {
                 logger.severe("Failed to send output: " + e.getMessage());
@@ -183,12 +186,16 @@ public class CoinjoinHandler {
     }
 
     void handleDecryptedMessage(String decryptedMessage) {
+        handleDecryptedMessage(decryptedMessage, Instant.now().getEpochSecond());
+    }
+
+    void handleDecryptedMessage(String decryptedMessage, long createdAt) {
         try {
             JoinstrMessage message = JoinstrMessage.fromJson(decryptedMessage);
             String type = message.getType();
 
             if ("output".equals(type)) {
-                handleOutputReceived(message);
+                handleOutputReceived(message, createdAt);
             } else if ("input".equals(type)) {
                 handleInputReceived(message);
             }
@@ -197,7 +204,7 @@ public class CoinjoinHandler {
         }
     }
 
-    private void handleOutputReceived(JoinstrMessage message) {
+    private void handleOutputReceived(JoinstrMessage message, long createdAt) {
         try {
             String addressStr = message.getAddress();
             if (addressStr == null) {
@@ -216,8 +223,7 @@ public class CoinjoinHandler {
                     return;
                 }
 
-                outputAddresses.add(addressStr);
-                pool.setConnectedPeers(outputAddresses.size());
+                recordOutput(addressStr, createdAt);
                 logger.info("Received output " + outputAddresses.size() + "/" + numPeers);
 
                 if (outputAddresses.size() == numPeers) {
@@ -324,6 +330,32 @@ public class CoinjoinHandler {
         executorService.submit(task);
     }
 
+    /**
+     * Record an output and the time its announcement was published.
+     *
+     * The registration PSBT commits to the outputs in order, so every peer has to arrive at the
+     * same order or the signatures do not agree. Peers see announcements in whatever order their
+     * own relay poll returns, so ordering by publication time is what makes them converge.
+     */
+    private void recordOutput(String address, long createdAt) {
+        synchronized (stateLock) {
+            if (!outputTimes.containsKey(address)) {
+                outputTimes.put(address, createdAt);
+                outputAddresses.add(address);
+            }
+        }
+        pool.setConnectedPeers(outputAddresses.size());
+    }
+
+    /** The registered outputs in the order every peer should build them. */
+    List<String> orderedOutputs() {
+        List<String> ordered = new ArrayList<>(outputAddresses);
+        ordered.sort(Comparator
+                .comparingLong((String address) -> outputTimes.getOrDefault(address, 0L))
+                .thenComparing(Comparator.naturalOrder()));
+        return ordered;
+    }
+
     /** Read the facts CoinjoinInput needs off the wallet. */
     CoinjoinInput.Coin coinFacts(BlockTransactionHashIndex utxo, WalletNode utxoNode) {
         boolean confirmed = utxo.getHeight() > 0;
@@ -371,9 +403,8 @@ public class CoinjoinHandler {
             logger.info("Creating PSBT: pool=" + poolAmountSats + " sats, fee/output=" + feePerOutput + ", output="
                     + outputAmount);
 
-            List<String> sortedOutputs = new ArrayList<>(outputAddresses);
-            Collections.sort(sortedOutputs);
-            logger.info("Sorted " + sortedOutputs.size() + " outputs for deterministic ordering");
+            List<String> sortedOutputs = orderedOutputs();
+            logger.info("Ordered " + sortedOutputs.size() + " outputs by announcement time");
 
             for (String addr : sortedOutputs) {
                 Address address = Address.fromString(addr);
