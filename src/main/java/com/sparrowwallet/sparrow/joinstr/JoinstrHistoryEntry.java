@@ -101,8 +101,6 @@ public class JoinstrHistoryEntry {
         Gson gson = new Gson();
         ArrayList<JoinstrHistoryEntry> historyStore = Config.get().getHistoryStore();
         String historyJson = gson.toJson(new JoinstrHistoryStoreWrapper(historyStore));
-        try (FileWriter writer = new FileWriter(filePath)) {
-            writer.write(historyJson);
-        }
+        SecureFile.write(filePath, historyJson);
     }
 }
