@@ -107,6 +107,18 @@ public class PoolAnnouncementTest {
     }
 
     /** Announcements from before the author check are still parsed when no author is known. */
+    /** A pool of one is not a coinjoin; joining it hands the relay a self-spend to watch. */
+    @Test
+    public void aPoolWithFewerThanTwoPeersIsIgnored() throws Exception {
+        String base = "{\"id\":\"abc\",\"public_key\":\"" + POOL_KEY + "\",\"denomination\":0.001,"
+                + "\"timeout\":" + (Instant.now().getEpochSecond() + 3600) + ","
+                + "\"relay\":\"wss://nos.lol\",\"peers\":";
+
+        assertNull(OtherPoolsController.parsePool(MAPPER.readTree(base + "1}"), POOL_KEY));
+        assertNull(OtherPoolsController.parsePool(MAPPER.readTree(base + "0}"), POOL_KEY));
+        assertNotNull(OtherPoolsController.parsePool(MAPPER.readTree(base + "2}"), POOL_KEY));
+    }
+
     @Test
     public void aMissingAuthorDoesNotRejectTheAnnouncement() throws Exception {
         assertNotNull(OtherPoolsController.parsePool(announcement(""), null));

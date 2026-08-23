@@ -4,8 +4,6 @@ import com.google.common.net.HostAndPort;
 import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.net.TorUtils;
 
-import nostr.client.Client;
-
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.util.function.BooleanSupplier;
@@ -44,6 +42,10 @@ public final class JoinstrTransport {
      * unrelated Sparrow traffic is unaffected.
      */
     public static Proxy proxy() {
+        if (directForTesting) {
+            return null;
+        }
+
         if (!isReady()) {
             return null;
         }
@@ -64,17 +66,20 @@ public final class JoinstrTransport {
     /**
      * Take a fresh circuit for the next request. Returns false when Tor is not available, in which
      * case the caller must not send anything.
+     *
+     * Each joinstr event goes out on its own circuit so the relay cannot tie one peer's output
+     * registration to its input registration by source address. Rotating does not disturb
+     * connections that are already open: a new circuit is picked up by the next connection, and
+     * every publish opens its own.
      */
     public static boolean newCircuit() {
+        if (directForTesting) {
+            return true;
+        }
+
         if (!isReady()) {
             logger.warning("Refusing to send a joinstr request: tor is not running");
             return false;
-        }
-
-        try {
-            Client.getInstance().disconnect();
-        } catch (Exception e) {
-            // not yet connected, safe to ignore
         }
 
         HostAndPort proxy = AppServices.getTorProxy();
@@ -92,4 +97,16 @@ public final class JoinstrTransport {
     static void setTorRunningForTesting(BooleanSupplier supplier) {
         torRunning = supplier == null ? AppServices::isTorRunning : supplier;
     }
+
+    /**
+     * Lets an integration test talk to a local relay with no tor in the way.
+     *
+     * Production always goes through {@link #proxy()}; this only exists so the message flow can
+     * be exercised without a tor daemon.
+     */
+    static void setDirectForTesting(boolean direct) {
+        directForTesting = direct;
+    }
+
+    private static boolean directForTesting = false;
 }

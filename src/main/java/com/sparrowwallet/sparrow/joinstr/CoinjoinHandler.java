@@ -59,6 +59,8 @@ public class CoinjoinHandler {
     private String myPsbtBase64;
     private BlockTransactionHashIndex myUtxo;
     private WalletNode myUtxoNode;
+    private final java.util.concurrent.atomic.AtomicBoolean recoveryScheduled =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
     private final java.util.concurrent.atomic.AtomicBoolean recovering =
             new java.util.concurrent.atomic.AtomicBoolean(false);
 
@@ -147,14 +149,6 @@ public class CoinjoinHandler {
                 return;
             }
 
-            if (canRecover()) {
-                // some peers registered an input and some did not, which is the case the
-                // ring signature recovery exists for
-                logger.warning("Coinjoin incomplete at timeout, starting recovery");
-                executorService.submit(this::runRecovery);
-                return;
-            }
-
             logger.warning("Coinjoin timed out before completion");
             updateStatus("Timed out");
             stopListening();
@@ -188,14 +182,7 @@ public class CoinjoinHandler {
                 nip04.setEvent(outputEvent);
                 nip04.sign();
 
-                {
-                    DefaultRequestContext context = new DefaultRequestContext();
-                    context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-                    context.setRelays(Map.of("default", relay));
-                    Client.getInstance().connect(context);
-                }
-
-                nip04.send(Map.of("default", relay));
+                publish(nip04, poolIdentity);
 
                 Long createdAt = outputEvent.getCreatedAt();
                 recordOutput(address, createdAt == null ? Instant.now().getEpochSecond() : createdAt);
@@ -261,6 +248,7 @@ public class CoinjoinHandler {
                 if (outputAddresses.size() == numPeers) {
                     logger.info("All outputs registered, ready for input registration");
                     updateStatus("Input registration");
+                    scheduleRecoveryCheck();
                     if (onReadyForInputCallback != null) {
                         FxDispatch.run(onReadyForInputCallback);
                     }
@@ -584,14 +572,7 @@ public class CoinjoinHandler {
             nip04.setEvent(inputEvent);
             nip04.sign();
 
-            {
-                DefaultRequestContext context = new DefaultRequestContext();
-                context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-                context.setRelays(Map.of("default", relay));
-                Client.getInstance().connect(context);
-            }
-
-            nip04.send(Map.of("default", relay));
+            publish(nip04, poolIdentity);
 
             logger.info("Signed input sent to pool");
         } catch (Exception e) {
@@ -603,9 +584,36 @@ public class CoinjoinHandler {
     /** How long each recovery phase waits for the other peers, in seconds. */
     static final long RECOVERY_WINDOW_SECONDS = 120;
 
+    /**
+     * How long input registration is given before recovery starts, in seconds.
+     *
+     * The reference implementation polls for inputs 360 times at 5 second intervals and enters
+     * recovery when that runs out, so peers reach recovery at roughly the same point. Its pool
+     * timeout is a separate thing and aborts rather than recovering, which is what this does too.
+     */
+    static final long INPUT_REGISTRATION_SECONDS = 1800;
+
     private final List<String> reregisteredOutputs = new CopyOnWriteArrayList<>();
     private final Set<String> seenKeyImages = Collections.synchronizedSet(new HashSet<>());
     private final List<String> resignPsbts = new CopyOnWriteArrayList<>();
+
+    /** Start recovery if input registration has not finished by the time it runs out. */
+    private void scheduleRecoveryCheck() {
+        if (!recoveryScheduled.compareAndSet(false, true)) {
+            return;
+        }
+
+        timeoutExecutor.schedule(() -> {
+            if (completed || finalizing.get()) {
+                return;
+            }
+
+            if (canRecover()) {
+                logger.warning("Input registration incomplete, starting recovery");
+                executorService.submit(this::runRecovery);
+            }
+        }, INPUT_REGISTRATION_SECONDS, java.util.concurrent.TimeUnit.SECONDS);
+    }
 
     /**
      * Whether this pool can be recovered: some peers registered an input and some did not.
@@ -845,17 +853,31 @@ public class CoinjoinHandler {
             nip04.setEvent(event);
             nip04.sign();
 
-            DefaultRequestContext context = new DefaultRequestContext();
-            context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-            context.setRelays(Map.of("default", relay));
-            context.setProxy(JoinstrTransport.proxy());
-            Client.getInstance().connect(context);
-
-            nip04.send(Map.of("default", relay));
+            publish(nip04, poolIdentity);
             return true;
         } catch (Exception e) {
             logger.severe("Failed to publish a pool message: " + e.getMessage());
             return false;
+        }
+    }
+
+    /** Send on a connection of its own, so this publish cannot disturb our subscription. */
+    private void publish(NIP04 nip04, Identity as) throws Exception {
+        Client client = new Client();
+        try {
+            DefaultRequestContext context = new DefaultRequestContext();
+            context.setPrivateKey(as.getPrivateKey().getRawData());
+            context.setRelays(new java.util.LinkedHashMap<>(Map.of("default", relay)));
+            context.setProxy(JoinstrTransport.proxy());
+            client.connect(context);
+
+            nip04.send(Map.of("default", relay));
+        } finally {
+            try {
+                client.disconnect();
+            } catch (Exception e) {
+                logger.fine("Error closing a publish connection: " + e.getMessage());
+            }
         }
     }
 
