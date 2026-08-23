@@ -49,7 +49,7 @@ public class NostrPublisher implements AutoCloseable {
     }
 
     public GenericEvent publishCustomEvent(String denomination, String peers, String bitcoinAddress,
-            double feeRate, long timeoutSeconds) {
+            double feeRate, long timeoutSeconds, String autctKeyset) {
 
         if (bitcoinAddress.isEmpty()) {
             logger.warning("No Bitcoin Address found. Please open a wallet in Sparrow first.");
@@ -72,7 +72,7 @@ public class NostrPublisher implements AutoCloseable {
             NIP01 nip01 = new NIP01(poolIdentity);
 
             GenericEvent event = buildPoolEvent(poolIdentity, poolId, network, denomination, peers, timeout,
-                    relayUrl, feeRate);
+                    relayUrl, feeRate, autctKeyset);
 
             nip01.setEvent(event);
             nip01.sign();
@@ -101,6 +101,12 @@ public class NostrPublisher implements AutoCloseable {
      */
     static GenericEvent buildPoolEvent(Identity poolIdentity, String poolId, String network, String denomination,
             String peers, long timeout, String relayUrl, double feeRate) {
+        return buildPoolEvent(poolIdentity, poolId, network, denomination, peers, timeout, relayUrl,
+                feeRate, null);
+    }
+
+    static GenericEvent buildPoolEvent(Identity poolIdentity, String poolId, String network, String denomination,
+            String peers, long timeout, String relayUrl, double feeRate, String autctKeyset) {
 
         String content = String.format(
                 "{\n" +
@@ -115,7 +121,7 @@ public class NostrPublisher implements AutoCloseable {
                         "  \"relays\": [\"%s\"],\n" +
                         "  \"relay\": \"%s\",\n" +
                         "  \"fee_rate\": %s,\n" +
-                        "  \"transport\": { \"tor\": { \"enable\": true }, \"vpn\": { \"enable\": false, \"vpn_gateway\": null } }\n" +
+                        "  \"transport\": { \"tor\": { \"enable\": true }, \"vpn\": { \"enable\": false, \"vpn_gateway\": null } }%s\n" +
                         "}",
                 poolId,
                 network,
@@ -125,7 +131,10 @@ public class NostrPublisher implements AutoCloseable {
                 timeout,
                 relayUrl,
                 relayUrl,
-                CoinjoinMath.formatFeeRate(feeRate));
+                CoinjoinMath.formatFeeRate(feeRate),
+                AutctPool.announcementJson(autctKeyset) == null
+                        ? ""
+                        : ",\n  \"autct\": " + AutctPool.announcementJson(autctKeyset));
 
         List<BaseTag> tags = new ArrayList<>();
 

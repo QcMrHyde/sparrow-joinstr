@@ -160,6 +160,14 @@ public class JoinPoolHandler {
             return "relay does not match the announcement";
         }
 
+        // a pool that advertised an aut-ct requirement cannot quietly drop or change it in the
+        // credentials, which would put the joiner in a pool with no sybil resistance at all
+        String advertised = pool.getAutctKeyset();
+        if (advertised != null && !advertised.isEmpty()
+                && !advertised.equals(credentials.getAutctKeyset())) {
+            return "aut-ct requirement does not match the announcement";
+        }
+
         return null;
     }
 

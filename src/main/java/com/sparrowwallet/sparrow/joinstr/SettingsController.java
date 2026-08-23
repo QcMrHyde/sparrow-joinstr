@@ -12,6 +12,9 @@ public class SettingsController extends JoinstrFormController {
     @FXML
     TextField nostrRelayTextField;
 
+    @FXML
+    TextField autctApiUrlTextField;
+
     @Override
     public void initializeView() {
 
@@ -27,6 +30,11 @@ public class SettingsController extends JoinstrFormController {
                 }
             });
             setDefaultNostrRelayIfEmpty();
+
+            autctApiUrlTextField.setPromptText(AutctClient.DEFAULT_API_URL);
+            autctApiUrlTextField.setText(Config.get().getAutctApiUrl());
+            autctApiUrlTextField.textProperty().addListener((observable, oldValue, newValue) ->
+                    Config.get().setAutctApiUrl(newValue == null ? null : newValue.trim()));
 
         } catch(Exception e) {
             e.printStackTrace();

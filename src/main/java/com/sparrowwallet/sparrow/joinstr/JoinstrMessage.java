@@ -19,6 +19,8 @@ public class JoinstrMessage {
     private Long timeout;
     private String relay;
     private String reason;
+    private com.google.gson.JsonObject autct;
+    private String autct_proof;
 
     public String getVersion() {
         return version;
@@ -124,6 +126,28 @@ public class JoinstrMessage {
 
     public void setRelay(String relay) {
         this.relay = relay;
+    }
+
+    /** The aut-ct keyset named in these credentials, or null. */
+    public String getAutctKeyset() {
+        if (autct == null || !autct.has("keyset") || autct.get("keyset").isJsonNull()) {
+            return null;
+        }
+        return autct.get("keyset").getAsString();
+    }
+
+    public void setAutctKeyset(String keyset) {
+        com.google.gson.JsonObject object = new com.google.gson.JsonObject();
+        object.addProperty("keyset", keyset);
+        this.autct = object;
+    }
+
+    public String getAutctProof() {
+        return autct_proof;
+    }
+
+    public void setAutctProof(String autct_proof) {
+        this.autct_proof = autct_proof;
     }
 
     public String getReason() {

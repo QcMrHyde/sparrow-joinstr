@@ -11,9 +11,6 @@ import com.fasterxml.jackson.databind.JsonNode;
  */
 public final class PoolSupport {
 
-    public static final String REQUIRES_AUTCT =
-            "This pool requires an aut-ct proof, which Sparrow cannot generate.";
-
     public static final String REQUIRES_VPN =
             "This pool requires a VPN transport. Sparrow is Tor only.";
 
@@ -27,10 +24,6 @@ public final class PoolSupport {
     public static String unsupportedReason(JsonNode poolData) {
         if (poolData == null) {
             return null;
-        }
-
-        if (requiresAutct(poolData)) {
-            return REQUIRES_AUTCT;
         }
 
         return transportReason(poolData.get("transport"));

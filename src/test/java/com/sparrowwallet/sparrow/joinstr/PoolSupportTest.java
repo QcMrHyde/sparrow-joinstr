@@ -65,29 +65,25 @@ public class PoolSupportTest {
                 ",\"transport\":\"i2p\"")));
     }
 
+    /** An aut-ct pool is joinable now that a proof can be generated for it. */
     @Test
-    public void anAutctPoolIsRefused() throws Exception {
-        String reason = PoolSupport.unsupportedReason(pool(
-                ",\"autct\":{\"keyset\":\"autct-830000-100000-1-2-1024.aks\",\"min_amount\":100000}"));
-
-        assertEquals(PoolSupport.REQUIRES_AUTCT, reason);
+    public void anAutctPoolIsJoinable() throws Exception {
+        assertNull(PoolSupport.unsupportedReason(pool(
+                ",\"autct\":{\"keyset\":\"autct-830000-100000-1-2-1024.aks\",\"min_amount\":100000}")));
     }
 
     /** The field only means anything with a keyset naming the requirement. */
     @Test
-    public void anEmptyAutctFieldDoesNotRefuseThePool() throws Exception {
+    public void anEmptyAutctFieldMeansNoRequirement() throws Exception {
         assertNull(PoolSupport.unsupportedReason(pool(",\"autct\":{}")));
-        assertNull(PoolSupport.unsupportedReason(pool(",\"autct\":{\"keyset\":\"\"}")));
-        assertNull(PoolSupport.unsupportedReason(pool(",\"autct\":{\"keyset\":\"   \"}")));
+        assertNull(PoolSupport.autctRequirement(pool(",\"autct\":{\"keyset\":\"\"}")));
     }
 
+    /** An aut-ct pool on a transport this client does not use is still refused, for transport. */
     @Test
-    public void autctIsReportedAheadOfTransport() throws Exception {
-        String reason = PoolSupport.unsupportedReason(pool(
-                ",\"autct\":{\"keyset\":\"autct-1-2-3-4-5.aks\"},\"transport\":\"vpn\""));
-
-        // both apply, but the proof requirement is the one the user can do nothing about
-        assertEquals(PoolSupport.REQUIRES_AUTCT, reason);
+    public void anAutctPoolOnVpnIsStillRefusedForItsTransport() throws Exception {
+        assertEquals(PoolSupport.REQUIRES_VPN, PoolSupport.unsupportedReason(pool(
+                ",\"autct\":{\"keyset\":\"autct-1-2-3-4-5.aks\"},\"transport\":\"vpn\"")));
     }
 
     /** Shown so a user can see what an aut-ct pool wants, even though we cannot satisfy it. */
