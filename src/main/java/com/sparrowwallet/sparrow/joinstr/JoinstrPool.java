@@ -308,6 +308,30 @@ public class JoinstrPool {
         return status;
     }
 
+    /** Read the pools written by savePoolsFile, or an empty list when there are none. */
+    public static ArrayList<JoinstrPool> loadPoolsFile(String filePath) {
+        try {
+            File file = new File(filePath);
+            if (!file.exists()) {
+                return new ArrayList<>();
+            }
+
+            String text = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            if (text.isBlank()) {
+                return new ArrayList<>();
+            }
+
+            Type mapType = new TypeToken<JoinstrPoolStoreWrapper>() {
+            }.getType();
+            JoinstrPoolStoreWrapper wrapper = new Gson().fromJson(text, mapType);
+            return wrapper == null ? new ArrayList<>() : wrapper.getPools();
+        } catch (Exception e) {
+            logger.warning("Could not read the saved pools: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
     public static void importPoolsFile(String directoryPath) {
 
         FileChooser fileChooser = new FileChooser();
