@@ -28,7 +28,7 @@
             </ImageView>
             <Label styleClass="title" text="Create a new pool"/>
             <Form style="-fx-max-width: 400px;">
-                <Fieldset inputGrow="ALWAYS">
+                <Fieldset inputGrow="ALWAYS" styleClass="wideLabelFieldSet">
                     <Field text="Denomination:" style="-fx-text-fill: #aaaaaa;">
                         <TextField fx:id="denominationField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
                             <tooltip>
@@ -53,7 +53,9 @@
                             </tooltip>
                         </TextField>
                     </Field>
-                    <Field text="Keyset (optional):" style="-fx-text-fill: #aaaaaa;">
+                </Fieldset>
+                <Fieldset inputGrow="ALWAYS" styleClass="wideLabelFieldSet" text="Sybil resistance (optional)">
+                    <Field text="aut-ct Keyset:" style="-fx-text-fill: #aaaaaa;">
                         <TextField fx:id="autctKeysetField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
                             <tooltip>
                                 <Tooltip text="aut-ct keyset, e.g. autct-830000-100000-1-2-1024.aks. Leave blank for no sybil resistance"/>
@@ -67,6 +69,8 @@
                             </tooltip>
                         </PasswordField>
                     </Field>
+                </Fieldset>
+                <Fieldset inputGrow="ALWAYS" styleClass="wideLabelFieldSet">
                     <Field>
                         <VBox alignment="CENTER">
                             <ToggleButton fx:id="createButton" text="Create" onAction="#handleCreateButton"
