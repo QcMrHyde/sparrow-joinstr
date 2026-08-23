@@ -30,6 +30,7 @@ public class JoinstrPool {
     private String poolId = "";
     private String unsupportedReason;
     private String requirement;
+    private String autctKeyset;
     private String feeRate = "1";
     private JoinPoolHandler handler;
 
@@ -90,6 +91,15 @@ public class JoinstrPool {
         this.unsupportedReason = unsupportedReason;
     }
 
+    /** The aut-ct keyset this pool demands, or null. */
+    public String getAutctKeyset() {
+        return autctKeyset;
+    }
+
+    public void setAutctKeyset(String autctKeyset) {
+        this.autctKeyset = autctKeyset;
+    }
+
     /** What this pool demands of a joiner, if anything. */
     public String getRequirement() {
         return requirement;
@@ -128,6 +138,9 @@ public class JoinstrPool {
         credentials.put("timeout", asLong(getTimeout()));
         credentials.put("relay", getRelay());
         credentials.put("fee_rate", getParsedFeeRate());
+        if (autctKeyset != null && !autctKeyset.isEmpty()) {
+            credentials.put("autct", Map.of("keyset", autctKeyset));
+        }
         credentials.put("private_key", privateKey);
         return credentials;
     }
