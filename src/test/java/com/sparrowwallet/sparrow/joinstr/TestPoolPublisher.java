@@ -21,7 +21,6 @@ final class TestPoolPublisher {
     }
 
     static boolean publish(Identity poolIdentity, String relay, String content) {
-        Client client = new Client();
         try {
             List<BaseTag> tags = new ArrayList<>();
             tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
@@ -34,22 +33,10 @@ final class TestPoolPublisher {
             nip04.setEvent(event);
             nip04.sign();
 
-            DefaultRequestContext context = new DefaultRequestContext();
-            context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-            context.setRelays(new LinkedHashMap<>(Map.of("default", relay)));
-            client.connect(context);
-
-            nip04.send(Map.of("default", relay));
-            Thread.sleep(400);
-            return true;
+            // the production publish path, so the test covers waiting for the relay's OK
+            return JoinstrPublisher.publish(poolIdentity, relay, event);
         } catch (Exception e) {
             return false;
-        } finally {
-            try {
-                client.disconnect();
-            } catch (Exception e) {
-                // nothing to close
-            }
         }
     }
 }
