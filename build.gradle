@@ -406,6 +406,8 @@ extraJavaModuleInfo {
         exports('okhttp3')
         requires('okio')
         requires('kotlin.stdlib')
+        // okhttp3.internal.concurrent.TaskRunner logs through java.util.logging
+        requires('java.logging')
     }
 
 
