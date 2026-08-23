@@ -139,6 +139,43 @@ public class JoinstrPool {
         }
     }
 
+    /**
+     * Forget this pool's private key.
+     *
+     * The key is what reads the pool's encrypted channel and what answers its join requests. Once
+     * a pool is finished or expired it has no further use, so keeping it only widens the window
+     * in which it can leak.
+     */
+    public void clearPrivateKey() {
+        this.privateKey = "";
+    }
+
+    /** Whether this pool can still be worked on, and so still needs its key. */
+    public boolean isFinished() {
+        if ("Complete".equalsIgnoreCase(getStatus())) {
+            return true;
+        }
+
+        try {
+            return Long.parseLong(getTimeout().trim()) < java.time.Instant.now().getEpochSecond();
+        } catch (Exception e) {
+            // a pool with an unreadable timeout is left alone rather than silently disarmed
+            return false;
+        }
+    }
+
+    /** Drop the keys of pools that are finished. Returns how many were dropped. */
+    public static int purgeFinishedKeys(Collection<JoinstrPool> pools) {
+        int purged = 0;
+        for (JoinstrPool pool : pools) {
+            if (pool.isFinished() && pool.getPrivateKey() != null && !pool.getPrivateKey().isEmpty()) {
+                pool.clearPrivateKey();
+                purged++;
+            }
+        }
+        return purged;
+    }
+
     public void setPrivateKey(String privateKey) {
         this.privateKey = privateKey;
     }
@@ -303,6 +340,11 @@ public class JoinstrPool {
 
         Gson gson = new Gson();
         ArrayList<JoinstrPool> poolStore = Config.get().getPoolStore();
+
+        int purged = purgeFinishedKeys(poolStore);
+        if (purged > 0) {
+            logger.info("Dropped the keys of " + purged + " finished pool(s)");
+        }
         JoinstrPool[] pools = poolStore.toArray(new JoinstrPool[0]);
         String poolsJson = gson.toJson(new JoinstrPoolStoreWrapper(pools));
         // This file holds the private key of every pool, so it must not be world readable.
