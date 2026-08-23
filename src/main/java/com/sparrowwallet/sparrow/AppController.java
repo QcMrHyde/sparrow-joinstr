@@ -550,8 +550,16 @@ public class AppController implements Initializable {
     }
 
     public void showJoinstr(ActionEvent event) {
+        if(getSelectedWalletForm() == null) {
+            AppServices.showErrorDialog("No Wallet Open",
+                    "Open a wallet before starting a coinjoin.");
+            return;
+        }
+
         Stage joinstrStage = getJoinstrStage();
-        joinstrStage.show();
+        if(joinstrStage != null) {
+            joinstrStage.show();
+        }
     }
 
     private Stage getJoinstrStage() {
@@ -593,8 +601,11 @@ public class AppController implements Initializable {
             }
 
             return stage;
-        } catch(IOException e) {
+        } catch(Exception e) {
+            // Leaving a half built controller behind makes the next click open a broken window
+            joinstrController = null;
             log.error("Error loading Joinstr stage", e);
+            AppServices.showErrorDialog("Error Opening Coinjoin", e.getMessage() == null ? e.toString() : e.getMessage());
         }
 
         return null;
