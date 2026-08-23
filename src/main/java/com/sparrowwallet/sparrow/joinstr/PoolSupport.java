@@ -36,6 +36,30 @@ public final class PoolSupport {
         return transportReason(poolData.get("transport"));
     }
 
+    /**
+     * What an aut-ct pool demands of a joiner, or null if it demands nothing.
+     *
+     * Shown so a user can see what the pool wants even though this client cannot satisfy it. The
+     * reference implementation shows the same three fields in its pool list.
+     */
+    public static String autctRequirement(JsonNode poolData) {
+        if (poolData == null || !requiresAutct(poolData)) {
+            return null;
+        }
+
+        JsonNode autct = poolData.get("autct");
+        StringBuilder requirement = new StringBuilder();
+        requirement.append(autct.path("min_amount").asLong(0)).append(" sats");
+        requirement.append(", ").append(autct.path("min_confirmations").asInt(0)).append(" confs");
+
+        String scriptType = autct.path("script_type").asText("");
+        if (!scriptType.isEmpty()) {
+            requirement.append(", ").append(scriptType);
+        }
+
+        return requirement.toString();
+    }
+
     private static boolean requiresAutct(JsonNode poolData) {
         JsonNode autct = poolData.get("autct");
         if (autct == null || autct.isNull()) {

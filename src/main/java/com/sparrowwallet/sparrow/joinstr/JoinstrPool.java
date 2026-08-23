@@ -29,6 +29,7 @@ public class JoinstrPool {
     private String privateKey;
     private String poolId = "";
     private String unsupportedReason;
+    private String requirement;
     private String feeRate = "1";
     private JoinPoolHandler handler;
 
@@ -87,6 +88,15 @@ public class JoinstrPool {
 
     public void setUnsupportedReason(String unsupportedReason) {
         this.unsupportedReason = unsupportedReason;
+    }
+
+    /** What this pool demands of a joiner, if anything. */
+    public String getRequirement() {
+        return requirement;
+    }
+
+    public void setRequirement(String requirement) {
+        this.requirement = requirement;
     }
 
     public boolean isJoinable() {

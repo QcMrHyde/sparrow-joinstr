@@ -27,6 +27,7 @@ import javafx.scene.control.TableColumn;
 import javafx.scene.control.TableView;
 import javafx.scene.control.Tooltip;
 import javafx.scene.control.cell.PropertyValueFactory;
+import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
 import javafx.util.Callback;
 
@@ -177,6 +178,7 @@ public class JoinstrPoolList extends VBox {
             public TableCell<JoinstrPool, Void> call(final TableColumn<JoinstrPool, Void> param) {
                 return new TableCell<>() {
                     private final Button joinButton = new Button("Join");
+                    private final StackPane joinButtonHolder = new StackPane(joinButton);
                     {
                         joinButton.setStyle(
                                 "-fx-background-color: #2196F3; " +
@@ -265,12 +267,15 @@ public class JoinstrPoolList extends VBox {
                         // a pool this client cannot complete is still listed, so the reason is
                         // visible, but joining it would only wait for a reply that never comes
                         joinButton.setDisable(!joinable);
-                        joinButton.setTooltip(joinable ? null : new Tooltip(pool.getUnsupportedReason()));
+                        // a disabled node receives no mouse events, so the tooltip goes on the
+                        // wrapper, which stays enabled
+                        Tooltip.install(joinButtonHolder,
+                                joinable ? null : new Tooltip(pool.getUnsupportedReason()));
                         joinButton.setStyle(joinable
                                 ? "-fx-background-color: #2196F3; -fx-text-fill: white; -fx-cursor: hand;"
                                 : "-fx-background-color: #666666; -fx-text-fill: #cccccc;");
 
-                        setGraphic(joinButton);
+                        setGraphic(joinButtonHolder);
                     }
                 };
             }
