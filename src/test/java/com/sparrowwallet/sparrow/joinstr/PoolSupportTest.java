@@ -90,6 +90,29 @@ public class PoolSupportTest {
         assertEquals(PoolSupport.REQUIRES_AUTCT, reason);
     }
 
+    /** Shown so a user can see what an aut-ct pool wants, even though we cannot satisfy it. */
+    @Test
+    public void theAutctRequirementIsDescribed() throws Exception {
+        String requirement = PoolSupport.autctRequirement(pool(
+                ",\"autct\":{\"keyset\":\"autct-830000-100000-6-2-1024.aks\",\"min_amount\":100000,"
+                + "\"min_confirmations\":6,\"script_type\":\"p2tr\"}"));
+
+        assertEquals("100000 sats, 6 confs, p2tr", requirement);
+    }
+
+    @Test
+    public void aRequirementWithoutAScriptTypeOmitsIt() throws Exception {
+        assertEquals("100000 sats, 0 confs", PoolSupport.autctRequirement(pool(
+                ",\"autct\":{\"keyset\":\"autct-1-2-3-4-5.aks\",\"min_amount\":100000}")));
+    }
+
+    @Test
+    public void aPoolWithNoAutctHasNoRequirement() throws Exception {
+        assertNull(PoolSupport.autctRequirement(pool("")));
+        assertNull(PoolSupport.autctRequirement(pool(",\"autct\":{}")));
+        assertNull(PoolSupport.autctRequirement(null));
+    }
+
     @Test
     public void aMissingAnnouncementIsNotRefused() {
         assertNull(PoolSupport.unsupportedReason(null));

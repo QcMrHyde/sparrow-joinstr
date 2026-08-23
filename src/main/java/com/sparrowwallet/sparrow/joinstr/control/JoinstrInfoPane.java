@@ -16,6 +16,8 @@ public class JoinstrInfoPane extends VBox {
     private Label denominationValueLabel;
     private Label feeRateValueLabel;
     private Label statusValueLabel;
+    private Label requirementLabel;
+    private Label requirementValueLabel;
     private Label unsupportedLabel;
     private Label unsupportedValueLabel;
 
@@ -62,6 +64,10 @@ public class JoinstrInfoPane extends VBox {
         statusLabel.getStyleClass().add("text-grey");
         statusValueLabel = new Label();
 
+        requirementLabel = new Label("Requirements:");
+        requirementLabel.getStyleClass().add("text-grey");
+        requirementValueLabel = new Label();
+
         unsupportedLabel = new Label("Not supported:");
         unsupportedLabel.getStyleClass().add("text-grey");
         unsupportedValueLabel = new Label();
@@ -73,6 +79,7 @@ public class JoinstrInfoPane extends VBox {
             denominationValueLabel.setStyle("-fx-text-fill: white;");
             feeRateValueLabel.setStyle("-fx-text-fill: white;");
             statusValueLabel.setStyle("-fx-text-fill: white;");
+            requirementValueLabel.setStyle("-fx-text-fill: white;");
             unsupportedValueLabel.setStyle("-fx-text-fill: white;");
         }
 
@@ -86,8 +93,13 @@ public class JoinstrInfoPane extends VBox {
         detailsGrid.add(feeRateValueLabel, 1, 3);
         detailsGrid.add(statusLabel, 0, 4);
         detailsGrid.add(statusValueLabel, 1, 4);
-        detailsGrid.add(unsupportedLabel, 0, 5);
-        detailsGrid.add(unsupportedValueLabel, 1, 5);
+        detailsGrid.add(requirementLabel, 0, 5);
+        detailsGrid.add(requirementValueLabel, 1, 5);
+        detailsGrid.add(unsupportedLabel, 0, 6);
+        detailsGrid.add(unsupportedValueLabel, 1, 6);
+
+        requirementLabel.managedProperty().bind(requirementLabel.visibleProperty());
+        requirementValueLabel.managedProperty().bind(requirementValueLabel.visibleProperty());
 
         // the row only appears for a pool this client cannot complete
         unsupportedLabel.managedProperty().bind(unsupportedLabel.visibleProperty());
@@ -105,9 +117,18 @@ public class JoinstrInfoPane extends VBox {
             feeRateValueLabel.setText(com.sparrowwallet.sparrow.joinstr.CoinjoinMath.formatFeeRate(pool.getParsedFeeRate()) + " sat/vB");
             statusValueLabel.textProperty().bind(pool.statusProperty());
             showUnsupported(pool.getUnsupportedReason());
+            showRequirement(pool.getRequirement());
         } else {
             clearPoolInfo();
         }
+    }
+
+    /** Show what a pool demands of a joiner, or hide the row when it demands nothing. */
+    private void showRequirement(String requirement) {
+        boolean show = requirement != null && !requirement.isEmpty();
+        requirementValueLabel.setText(show ? requirement : "");
+        requirementLabel.setVisible(show);
+        requirementValueLabel.setVisible(show);
     }
 
     /** Show why a pool cannot be joined, or hide the row when it can. */
@@ -126,5 +147,6 @@ public class JoinstrInfoPane extends VBox {
         statusValueLabel.textProperty().unbind();
         statusValueLabel.setText("");
         showUnsupported(null);
+        showRequirement(null);
     }
 }
