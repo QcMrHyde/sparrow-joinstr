@@ -95,8 +95,11 @@ public class Config {
     // Joinstr settings
     private String nostrRelay;
     private String autctApiUrl;
-    private ArrayList<JoinstrPool> poolStore;
-    private ArrayList<JoinstrHistoryEntry> historyStore;
+    // Not serialised into the config: these hold JavaFX properties, and gson reflecting into
+    // javafx.beans.property throws InaccessibleObjectException in the packaged modular image.
+    // They live in their own files, written by JoinstrPool and JoinstrHistoryEntry.
+    private transient ArrayList<JoinstrPool> poolStore;
+    private transient ArrayList<JoinstrHistoryEntry> historyStore;
 
     // ================
 
@@ -767,8 +770,9 @@ public class Config {
     }
 
     public ArrayList<JoinstrPool> getPoolStore() {
-        if(poolStore == null)
-            poolStore = new ArrayList<JoinstrPool>();
+        if(poolStore == null) {
+            poolStore = JoinstrPool.loadPoolsFile(Storage.getJoinstrPoolsFile().getPath());
+        }
         return poolStore;
     }
 
@@ -778,8 +782,9 @@ public class Config {
     }
 
     public ArrayList<JoinstrHistoryEntry> getHistoryStore() {
-        if(historyStore == null)
-            historyStore = new ArrayList<JoinstrHistoryEntry>();
+        if(historyStore == null) {
+            historyStore = JoinstrHistoryEntry.loadHistoryFile(Storage.getJoinstrHistoryFile().getPath());
+        }
         return historyStore;
     }
 

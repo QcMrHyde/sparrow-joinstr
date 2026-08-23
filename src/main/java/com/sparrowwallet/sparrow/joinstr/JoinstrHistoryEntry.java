@@ -97,6 +97,30 @@ public class JoinstrHistoryEntry {
         }
     }
 
+    /** Read the coinjoin history written by saveHistoryFile, or an empty list. */
+    public static ArrayList<JoinstrHistoryEntry> loadHistoryFile(String filePath) {
+        try {
+            java.io.File file = new java.io.File(filePath);
+            if (!file.exists()) {
+                return new ArrayList<>();
+            }
+
+            String text = new String(java.nio.file.Files.readAllBytes(file.toPath()),
+                    java.nio.charset.StandardCharsets.UTF_8);
+            if (text.isBlank()) {
+                return new ArrayList<>();
+            }
+
+            JoinstrHistoryStoreWrapper wrapper =
+                    new Gson().fromJson(text, JoinstrHistoryStoreWrapper.class);
+            return wrapper == null ? new ArrayList<>() : wrapper.getEntries();
+        } catch (Exception e) {
+            java.util.logging.Logger.getLogger(JoinstrHistoryEntry.class.getName())
+                    .warning("Could not read the coinjoin history: " + e.getMessage());
+            return new ArrayList<>();
+        }
+    }
+
     public static void saveHistoryFile(String filePath) throws IOException {
         Gson gson = new Gson();
         ArrayList<JoinstrHistoryEntry> historyStore = Config.get().getHistoryStore();
