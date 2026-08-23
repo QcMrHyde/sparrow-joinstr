@@ -134,6 +134,12 @@ public class OtherPoolsController extends JoinstrFormController {
     }
 
     private void fetchPools() {
+        if (CoinjoinActivity.isActive()) {
+            // discovery rotates the tor circuit, which disconnects the shared nostr client and
+            // would take the running coinjoin's subscription with it
+            logger.info("Skipping pool discovery while a coinjoin is in progress");
+            return;
+        }
 
         if (!isFetching.compareAndSet(false, true)) {
             return;

@@ -63,6 +63,7 @@ public class CoinjoinHandler {
 
     private final Object stateLock = new Object();
     private final java.util.concurrent.atomic.AtomicBoolean finalizing = new java.util.concurrent.atomic.AtomicBoolean(false);
+    private final java.util.concurrent.atomic.AtomicBoolean holdingDiscovery = new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile boolean completed = false;
 
     private final ExecutorService executorService = Executors.newSingleThreadExecutor();
@@ -100,6 +101,9 @@ public class CoinjoinHandler {
 
         this.myOutputAddress = myOutputAddress;
 
+        if (holdingDiscovery.compareAndSet(false, true)) {
+            CoinjoinActivity.started();
+        }
         updateStatus("Output registered");
 
         scheduleTimeout();
@@ -812,6 +816,11 @@ public class CoinjoinHandler {
     }
 
     public void stopListening() {
+        // idempotent: a coinjoin that both completes and later times out must not release the
+        // hold twice, and one that never starts must not release a hold it never took
+        if (holdingDiscovery.compareAndSet(true, false)) {
+            CoinjoinActivity.finished();
+        }
         try {
             if (messageListener != null) {
                 messageListener.close();
