@@ -2,7 +2,9 @@ package com.sparrowwallet.sparrow.joinstr;
 
 import com.google.gson.Gson;
 import com.sparrowwallet.drongo.address.Address;
+import com.sparrowwallet.drongo.Utils;
 import com.sparrowwallet.drongo.protocol.Script;
+import com.sparrowwallet.drongo.protocol.SigHash;
 import com.sparrowwallet.drongo.protocol.Transaction;
 import com.sparrowwallet.drongo.protocol.TransactionInput;
 import com.sparrowwallet.drongo.protocol.TransactionOutput;
@@ -55,6 +57,10 @@ public class CoinjoinHandler {
     private final Set<String> allInputs = Collections.synchronizedSet(new HashSet<>());
     private String myOutputAddress;
     private String myPsbtBase64;
+    private BlockTransactionHashIndex myUtxo;
+    private WalletNode myUtxoNode;
+    private final java.util.concurrent.atomic.AtomicBoolean recovering =
+            new java.util.concurrent.atomic.AtomicBoolean(false);
 
     private Wallet wallet;
     private Storage storage;
@@ -137,11 +143,21 @@ public class CoinjoinHandler {
         }
 
         timeoutExecutor.schedule(() -> {
-            if (!completed) {
-                logger.warning("Coinjoin timed out before completion");
-                updateStatus("Timed out");
-                stopListening();
+            if (completed) {
+                return;
             }
+
+            if (canRecover()) {
+                // some peers registered an input and some did not, which is the case the
+                // ring signature recovery exists for
+                logger.warning("Coinjoin incomplete at timeout, starting recovery");
+                executorService.submit(this::runRecovery);
+                return;
+            }
+
+            logger.warning("Coinjoin timed out before completion");
+            updateStatus("Timed out");
+            stopListening();
         }, delaySeconds, java.util.concurrent.TimeUnit.SECONDS);
     }
 
@@ -210,6 +226,10 @@ public class CoinjoinHandler {
                 handleOutputReceived(message, createdAt);
             } else if ("input".equals(type)) {
                 handleInputReceived(message);
+            } else if ("reregister".equals(type)) {
+                handleReregisterReceived(decryptedMessage);
+            } else if ("resign".equals(type)) {
+                handleResignReceived(message);
             }
         } catch (Exception e) {
             logger.severe("Error handling message: " + e.getMessage());
@@ -255,6 +275,8 @@ public class CoinjoinHandler {
      * Start input phase - create and sign PSBT with selected UTXO.
      */
     public void startInputPhase(BlockTransactionHashIndex selectedUtxo, WalletNode utxoNode) {
+        this.myUtxo = selectedUtxo;
+        this.myUtxoNode = utxoNode;
         // The outpoint alongside the registered outputs is the input to output linkage this
         // coinjoin exists to break, so log shapes rather than values.
         logger.info("Starting input registration");
@@ -578,6 +600,265 @@ public class CoinjoinHandler {
         }
     }
 
+    /** How long each recovery phase waits for the other peers, in seconds. */
+    static final long RECOVERY_WINDOW_SECONDS = 120;
+
+    private final List<String> reregisteredOutputs = new CopyOnWriteArrayList<>();
+    private final Set<String> seenKeyImages = Collections.synchronizedSet(new HashSet<>());
+    private final List<String> resignPsbts = new CopyOnWriteArrayList<>();
+
+    /**
+     * Whether this pool can be recovered: some peers registered an input and some did not.
+     *
+     * With every input present there is nothing to recover, and with none there is no ring to
+     * sign against.
+     */
+    boolean canRecover() {
+        int registered = inputPSBTs.size();
+        return registered > 0 && registered < numPeers && myPsbtBase64 != null;
+    }
+
+    /**
+     * Recovery, phase 3.
+     *
+     * The peers that registered an input claim an output again, this time proving they are one of
+     * the ring of phase 2 keys rather than saying which. The pool keeps one output per key image,
+     * so a peer cannot take two, and the peer that never registered an input gets nothing.
+     */
+    private void runRecovery() {
+        if (!recovering.compareAndSet(false, true)) {
+            return;
+        }
+
+        try {
+            updateStatus("Recovering");
+
+            List<RingInput.Member> ring = RingInput.ring(new ArrayList<>(inputPSBTs));
+            List<String> ringPubKeys = RingInput.pubKeys(ring);
+            if (ringPubKeys.size() < 2) {
+                logger.severe("Not enough valid inputs to recover this coinjoin");
+                updateStatus("Timed out");
+                stopListening();
+                return;
+            }
+
+            String myPrivateKeyHex = myRingPrivateKey(ringPubKeys);
+            if (myPrivateKeyHex == null) {
+                logger.severe("Could not identify our own input among the ring");
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            String poolId = pool.getPoolId();
+            int myIndex = ringPubKeys.indexOf(Utils.bytesToHex(myKey(myUtxoNode).getPubKey()));
+            if (myIndex < 0) {
+                logger.severe("Our own key is not in the ring");
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            Lsag.Signature signature = Lsag.sign(
+                    Reregister.message(myOutputAddress, poolId), ringPubKeys, myPrivateKeyHex, myIndex);
+
+            reregisteredOutputs.add(myOutputAddress);
+            seenKeyImages.add(signature.getY0());
+
+            if (!publishToPool(Reregister.build(myOutputAddress, poolId, signature))) {
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            logger.info("Re-registered our output, waiting for the other ring members");
+
+            if (!awaitUntil(() -> reregisteredOutputs.size() >= ringPubKeys.size())) {
+                // the ring hides which input belongs to which output, so one missing peer cannot
+                // simply be dropped without unbalancing the transaction
+                logger.severe("Recovery incomplete: " + reregisteredOutputs.size() + "/"
+                        + ringPubKeys.size() + " outputs re-registered");
+                updateStatus("Timed out");
+                stopListening();
+                return;
+            }
+
+            runResign(ring);
+        } catch (Exception e) {
+            logger.severe("Recovery failed: " + e.getMessage());
+            updateStatus("Error: Check logs");
+            stopListening();
+        }
+    }
+
+    /**
+     * Recovery, phase 4.
+     *
+     * Every peer rebuilds the same transaction from the confirmed inputs and the re-registered
+     * outputs and signs it with SIGHASH_ALL, so nothing can be added to it afterwards.
+     */
+    private void runResign(List<RingInput.Member> ring) {
+        try {
+            List<String> outputs = new ArrayList<>(reregisteredOutputs);
+            Collections.sort(outputs);
+
+            long outputAmount = CoinjoinMath.recoveryOutputAmount(
+                    poolAmountSats, feeRate, outputs.size(), ring.size());
+
+            String rejection = RecoveryTransaction.rejectionReason(outputs, outputAmount, ring);
+            if (rejection != null) {
+                logger.severe("Refusing to re-sign: " + rejection);
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            PSBT psbt = RecoveryTransaction.build(outputs, outputAmount, ring);
+            signRecoveryInput(psbt);
+
+            String myResigned = Base64.toBase64String(psbt.serialize());
+            resignPsbts.add(myResigned);
+
+            JoinstrMessage message = JoinstrMessage.of("resign");
+            message.setPsbt(myResigned);
+            if (!publishToPool(message.toJson())) {
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            logger.info("Published our re-signed input, waiting for the other peers");
+
+            if (!awaitUntil(() -> resignPsbts.size() >= ring.size())) {
+                logger.severe("Recovery incomplete: " + resignPsbts.size() + "/" + ring.size()
+                        + " peers re-signed");
+                updateStatus("Timed out");
+                stopListening();
+                return;
+            }
+
+            Transaction finalTx = RecoveryTransaction.combine(new ArrayList<>(resignPsbts));
+            if (finalTx == null) {
+                logger.severe("Could not combine the re-signed inputs");
+                updateStatus("Error: Check logs");
+                stopListening();
+                return;
+            }
+
+            updateStatus("broadcast");
+            broadcastTransaction(finalTx, RecoveryTransaction.fee(outputs.size(), outputAmount, ring));
+        } catch (Exception e) {
+            logger.severe("Re-signing failed: " + e.getMessage());
+            updateStatus("Error: Check logs");
+            stopListening();
+        }
+    }
+
+    /** Wait for a condition, or give up when the recovery window closes. */
+    private boolean awaitUntil(java.util.function.BooleanSupplier done) {
+        long deadline = Instant.now().getEpochSecond() + RECOVERY_WINDOW_SECONDS;
+        while (Instant.now().getEpochSecond() < deadline) {
+            if (done.getAsBoolean()) {
+                return true;
+            }
+            try {
+                Thread.sleep(2000);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return false;
+            }
+        }
+        return done.getAsBoolean();
+    }
+
+    private com.sparrowwallet.drongo.crypto.ECKey myKey(WalletNode node) {
+        try {
+            return wallet.getKeystores().get(0).getKey(node);
+        } catch (Exception e) {
+            logger.severe("Could not derive our signing key: " + e.getMessage());
+            return null;
+        }
+    }
+
+    /** Our own signing key, if our input is in the ring. */
+    private String myRingPrivateKey(List<String> ringPubKeys) {
+        try {
+            com.sparrowwallet.drongo.crypto.ECKey key = myKey(myUtxoNode);
+            if (key == null || !key.hasPrivKey()) {
+                return null;
+            }
+            if (!ringPubKeys.contains(Utils.bytesToHex(key.getPubKey()))) {
+                return null;
+            }
+            return String.format("%064x", key.getPrivKey());
+        } catch (Exception e) {
+            logger.severe("Could not read our own signing key: " + e.getMessage());
+            return null;
+        }
+    }
+
+    private void signRecoveryInput(PSBT psbt) {
+        com.sparrowwallet.drongo.crypto.ECKey key = myKey(myUtxoNode);
+        if (key == null) {
+            throw new IllegalStateException("no signing key for our recovery input");
+        }
+        String myPrevout = myUtxo.getHash().toString() + ":" + myUtxo.getIndex();
+
+        for (PSBTInput input : psbt.getPsbtInputs()) {
+            String prevout = input.getInput().getOutpoint().getHash().toString() + ":"
+                    + input.getInput().getOutpoint().getIndex();
+            if (!myPrevout.equals(prevout)) {
+                continue;
+            }
+
+            input.setSigHash(SigHash.ALL);
+            input.sign(key);
+
+            if (input.getPartialSignatures() != null && !input.getPartialSignatures().isEmpty()) {
+                var entry = input.getPartialSignatures().entrySet().iterator().next();
+                input.setFinalScriptWitness(new com.sparrowwallet.drongo.protocol.TransactionWitness(
+                        psbt.getTransaction(), entry.getKey(), entry.getValue()));
+            }
+        }
+    }
+
+    /** Publish an encrypted message to the pool's own key, which every peer reads. */
+    private boolean publishToPool(String content) {
+        try {
+            if (!JoinstrTransport.newCircuit()) {
+                updateStatus("Error: Tor not running");
+                return false;
+            }
+
+            List<BaseTag> tags = new ArrayList<>();
+            tags.add(new PubKeyTag(poolIdentity.getPublicKey()));
+
+            NIP04 nip04 = new NIP04(poolIdentity, poolIdentity.getPublicKey());
+            String encrypted = nip04.encrypt(poolIdentity, content, poolIdentity.getPublicKey());
+
+            GenericEvent event = new GenericEvent(
+                    poolIdentity.getPublicKey(),
+                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(),
+                    tags,
+                    encrypted);
+
+            nip04.setEvent(event);
+            nip04.sign();
+
+            DefaultRequestContext context = new DefaultRequestContext();
+            context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
+            context.setRelays(Map.of("default", relay));
+            context.setProxy(JoinstrTransport.proxy());
+            Client.getInstance().connect(context);
+
+            nip04.send(Map.of("default", relay));
+            return true;
+        } catch (Exception e) {
+            logger.severe("Failed to publish a pool message: " + e.getMessage());
+            return false;
+        }
+    }
+
     private void handleInputReceived(JoinstrMessage message) {
         try {
             String psbtBase64 = message.getPsbt();
@@ -632,6 +913,44 @@ public class CoinjoinHandler {
             }
         } catch (Exception e) {
             logger.severe("Error handling input: " + e.getMessage());
+        }
+    }
+
+    private void handleReregisterReceived(String decrypted) {
+        if (!recovering.get()) {
+            return;
+        }
+
+        List<String> ringPubKeys = RingInput.pubKeys(RingInput.ring(new ArrayList<>(inputPSBTs)));
+        Reregister.Accepted accepted = Reregister.validate(decrypted, pool.getPoolId(), ringPubKeys,
+                new ArrayList<>(reregisteredOutputs), new HashSet<>(seenKeyImages));
+        if (accepted == null) {
+            return;
+        }
+
+        synchronized (stateLock) {
+            if (seenKeyImages.contains(accepted.keyImage())
+                    || reregisteredOutputs.contains(accepted.address())
+                    || reregisteredOutputs.size() >= ringPubKeys.size()) {
+                return;
+            }
+            seenKeyImages.add(accepted.keyImage());
+            reregisteredOutputs.add(accepted.address());
+            logger.info("Accepted a re-registered output " + reregisteredOutputs.size() + "/"
+                    + ringPubKeys.size());
+        }
+    }
+
+    private void handleResignReceived(JoinstrMessage message) {
+        if (!recovering.get() || message.getPsbt() == null) {
+            return;
+        }
+
+        synchronized (stateLock) {
+            if (!resignPsbts.contains(message.getPsbt())) {
+                resignPsbts.add(message.getPsbt());
+                logger.info("Received a re-signed input " + resignPsbts.size());
+            }
         }
     }
 
