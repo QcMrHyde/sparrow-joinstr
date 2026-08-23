@@ -16,13 +16,19 @@ import java.util.logging.Logger;
 
 import javafx.fxml.FXML;
 import javafx.fxml.FXMLLoader;
+import javafx.geometry.Insets;
 import javafx.scene.Node;
+import javafx.scene.Scene;
+import javafx.scene.control.Label;
+import javafx.scene.control.ProgressBar;
 import javafx.scene.control.Toggle;
 import javafx.scene.control.ToggleButton;
 import javafx.scene.control.ToggleGroup;
 import javafx.scene.layout.StackPane;
 import javafx.scene.layout.VBox;
+import javafx.stage.Modality;
 import javafx.stage.Stage;
+import javafx.stage.StageStyle;
 
 public class JoinstrController extends JoinstrFormController implements IThreadExecutor {
 
@@ -88,7 +94,7 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
         joinstrMenuBox.visibleProperty().bind(getJoinstrForm().lockedProperty().not());
 
         // Set theme CSS
-        String darkCss = getClass().getResource("../darktheme.css").toExternalForm();
+        String darkCss = AppServices.class.getResource("darktheme.css").toExternalForm();
         if(Config.get().getTheme() == Theme.DARK) {
             if(!stage.getScene().getStylesheets().contains(darkCss)) {
                 stage.getScene().getStylesheets().add(darkCss);
@@ -195,6 +201,13 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
      * property is set and the rest of Sparrow's traffic is unaffected.
      */
     private void awaitTor() {
+        if(AppServices.isTorRunning()) {
+            log.info("[Joinstr] Tor is already running, joinstr requests will use it");
+            return;
+        }
+
+        Stage progress = showTorProgress();
+
         Thread t = new Thread(() -> {
             try {
                 int waited = 0;
@@ -204,18 +217,52 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
                 }
                 if (AppServices.isTorRunning()) {
                     log.info("[Joinstr] Tor is running, joinstr requests will use it");
+                    javafx.application.Platform.runLater(progress::close);
                 } else {
                     log.warn("[Joinstr] Tor not ready after 90s, joinstr requests will be refused");
-                    javafx.application.Platform.runLater(() -> AppServices.showErrorDialog(
-                            "Tor Not Running", JoinstrTransport.NOT_READY));
+                    javafx.application.Platform.runLater(() -> {
+                        progress.close();
+                        AppServices.showErrorDialog("Tor Not Running", JoinstrTransport.NOT_READY);
+                    });
                 }
             } catch (InterruptedException e) {
+                javafx.application.Platform.runLater(progress::close);
                 Thread.currentThread().interrupt();
             }
         });
         t.setDaemon(true);
         t.setName("TorReadinessWatcher");
         t.start();
+    }
+
+    /**
+     * Tor can take a while on first start, and joinstr cannot send anything until it is up.
+     * Show that rather than leaving the window looking stuck.
+     */
+    private Stage showTorProgress() {
+        Label message = new Label("Starting Tor, this can take a minute on first run.");
+        ProgressBar progressBar = new ProgressBar();
+        progressBar.setProgress(ProgressBar.INDETERMINATE_PROGRESS);
+        progressBar.setMaxWidth(Double.MAX_VALUE);
+
+        VBox content = new VBox(12, message, progressBar);
+        content.setPadding(new Insets(20));
+        content.setPrefWidth(360);
+
+        Scene scene = new Scene(content);
+        if(Config.get().getTheme() == Theme.DARK) {
+            scene.getStylesheets().add(AppServices.class.getResource("darktheme.css").toExternalForm());
+        }
+
+        Stage progress = new Stage(StageStyle.UTILITY);
+        progress.setTitle("Coinjoin");
+        progress.initOwner(stage);
+        progress.initModality(Modality.NONE);
+        progress.setResizable(false);
+        progress.setScene(scene);
+        progress.show();
+
+        return progress;
     }
 
     @Override
