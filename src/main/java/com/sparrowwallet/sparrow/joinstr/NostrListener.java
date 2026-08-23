@@ -202,14 +202,14 @@ public class NostrListener implements AutoCloseable {
 
     private void connectAndSubscribe() {
         try {
-            if (!JoinstrTransport.newCircuit()) {
+            if (!JoinstrTransport.newCircuitFor(relay)) {
                 throw new IllegalStateException(JoinstrTransport.NOT_READY);
             }
 
             client = new Client();
 
             DefaultRequestContext context = JoinstrPublisher.context(identity, relay,
-                    JoinstrTransport.proxy());
+                    JoinstrTransport.proxy(relay));
             context.setMessageListener((message, source) -> onRelayMessage(message));
 
             Filters filters = Filters.builder()

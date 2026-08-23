@@ -52,7 +52,7 @@ public final class JoinstrPublisher {
      * relay's acknowledgement is delivered through the same message listener that carries events.
      */
     public static boolean publish(Identity as, String relay, GenericEvent signedEvent) {
-        if (!JoinstrTransport.newCircuit()) {
+        if (!JoinstrTransport.newCircuitFor(relay)) {
             logger.warning("Not publishing: tor is not running");
             return false;
         }
@@ -63,7 +63,7 @@ public final class JoinstrPublisher {
 
         Client client = new Client();
         try {
-            DefaultRequestContext context = context(as, relay, JoinstrTransport.proxy());
+            DefaultRequestContext context = context(as, relay, JoinstrTransport.proxy(relay));
             context.setMessageListener((message, source) -> {
                 if (message instanceof OkMessage ok
                         && (eventId == null || eventId.equals(ok.getEventId()))) {

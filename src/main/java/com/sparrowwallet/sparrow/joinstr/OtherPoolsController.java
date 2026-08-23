@@ -216,7 +216,8 @@ public class OtherPoolsController extends JoinstrFormController {
             Client client = new Client();
 
             try {
-                if (!JoinstrTransport.newCircuit()) {
+                String discoveryRelay = JoinstrRelay.relayOrDefault(Config.get().getNostrRelay());
+                if (!JoinstrTransport.newCircuitFor(discoveryRelay)) {
                     Platform.runLater(() -> showError(JoinstrTransport.NOT_READY));
                     return;
                 }
@@ -225,9 +226,8 @@ public class OtherPoolsController extends JoinstrFormController {
 
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(identity.getPrivateKey().getRawData());
-                context.setRelays(new LinkedHashMap<>(Map.of("default",
-                        JoinstrRelay.relayOrDefault(Config.get().getNostrRelay()))));
-                context.setProxy(JoinstrTransport.proxy());
+                context.setRelays(new LinkedHashMap<>(Map.of("default", discoveryRelay)));
+                context.setProxy(JoinstrTransport.proxy(discoveryRelay));
                 context.setMessageListener((message, source) -> {
                     if (!(message instanceof EventMessage eventMessage)
                             || !(eventMessage.getEvent() instanceof GenericEvent event)) {
