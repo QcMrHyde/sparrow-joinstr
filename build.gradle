@@ -46,7 +46,7 @@ java {
 
 dependencies {
     //Any changes to the dependencies must be reflected in the module definitions below!
-    implementation('com.github.1440000bytes:nostr-java:v0.007.5-alpha') {
+    implementation('com.github.1440000bytes:nostr-java:v0.007.6-alpha') {
         exclude module: 'nostr-java-test'
     }
     implementation(project(':drongo'))

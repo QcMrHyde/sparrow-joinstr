@@ -216,17 +216,26 @@ public class JoinstrPoolList extends VBox {
                                             tags,
                                             encryptedContent);
 
+                                    Client joinClient = new Client();
                                     nip04.setEvent(encrypted_event);
                                     nip04.sign();
 
                                     {
                                         DefaultRequestContext context = new DefaultRequestContext();
                                         context.setPrivateKey(identity.getPrivateKey().getRawData());
-                                        context.setRelays(Map.of("default", pool.getRelay()));
-                                        Client.getInstance().connect(context);
+                                        context.setRelays(new java.util.LinkedHashMap<>(
+                                                Map.of("default", pool.getRelay())));
+                                        context.setProxy(JoinstrTransport.proxy());
+                                        joinClient.connect(context);
                                     }
 
                                     nip04.send(Map.of("default", pool.getRelay()));
+
+                                    try {
+                                        joinClient.disconnect();
+                                    } catch (Exception e) {
+                                        // nothing to close
+                                    }
 
                                     Logger.getLogger(JoinstrPoolList.class.getName())
                                             .info("Join request sent. Event ID:: " + encrypted_event.getId());

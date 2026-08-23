@@ -75,6 +75,7 @@ public class NostrPublisher implements AutoCloseable {
             String network = com.sparrowwallet.drongo.Network.get().getName();
 
             NIP01 nip01 = new NIP01(poolIdentity);
+            Client publisher = new Client();
 
             GenericEvent event = buildPoolEvent(poolIdentity, poolId, network, denomination, peers, timeout,
                     relayUrl, feeRate);
@@ -86,10 +87,17 @@ public class NostrPublisher implements AutoCloseable {
                 DefaultRequestContext context = new DefaultRequestContext();
                 context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
                 context.setRelays(relays);
-                Client.getInstance().connect(context);
+                context.setProxy(JoinstrTransport.proxy());
+                publisher.connect(context);
             }
 
             nip01.send(relays);
+
+            try {
+                publisher.disconnect();
+            } catch (Exception e) {
+                logger.fine("Error closing the announcement connection: " + e.getMessage());
+            }
 
             logger.info("Event ID: " + event.getId());
             logger.info("Event: " + event);

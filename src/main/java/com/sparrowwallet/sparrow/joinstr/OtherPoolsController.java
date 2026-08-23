@@ -159,6 +159,12 @@ public class OtherPoolsController extends JoinstrFormController {
             return null;
         }
 
+        // a pool of one is not a coinjoin, and joining one would just hand the relay a
+        // self-spend to watch
+        if (poolData.get("peers").asInt(0) < 2) {
+            return null;
+        }
+
         String poolKey = poolData.get("public_key").asText();
         if (authorPubKey != null && !authorPubKey.equalsIgnoreCase(poolKey)) {
             logger.warning("Ignoring a pool announcement that is not signed by the key it names");
@@ -204,7 +210,7 @@ public class OtherPoolsController extends JoinstrFormController {
         this.getJoinstrController().submitTask(() -> {
             List<JoinstrPool> pools = new CopyOnWriteArrayList<>();
             ObjectMapper mapper = new ObjectMapper();
-            Client client = Client.getInstance();
+            Client client = new Client();
 
             try {
                 if (!JoinstrTransport.newCircuit()) {
