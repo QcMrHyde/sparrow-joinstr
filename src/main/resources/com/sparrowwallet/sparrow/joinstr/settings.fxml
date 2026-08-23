@@ -24,6 +24,9 @@
                     <Label GridPane.rowIndex="4" GridPane.columnIndex="0">Nostr Relay:</Label>
                     <TextField prefWidth="100" maxWidth="150" GridPane.rowIndex="4" GridPane.columnIndex="1" fx:id="nostrRelayTextField">wss://nos.lol</TextField>
 
+                    <Label GridPane.rowIndex="5" GridPane.columnIndex="0">aut-ct Server:</Label>
+                    <TextField prefWidth="100" maxWidth="250" GridPane.rowIndex="5" GridPane.columnIndex="1" fx:id="autctApiUrlTextField"/>
+
                 </children>
             </GridPane>
         </VBox>

@@ -94,6 +94,7 @@ public class Config {
 
     // Joinstr settings
     private String nostrRelay;
+    private String autctApiUrl;
     private ArrayList<JoinstrPool> poolStore;
     private ArrayList<JoinstrHistoryEntry> historyStore;
 
@@ -789,6 +790,15 @@ public class Config {
 
     public String getNostrRelay() {
         return nostrRelay;
+    }
+
+    public String getAutctApiUrl() {
+        return autctApiUrl;
+    }
+
+    public void setAutctApiUrl(String autctApiUrl) {
+        this.autctApiUrl = autctApiUrl;
+        flush();
     }
 
     public void setNostrRelay(String nostrRelay) {

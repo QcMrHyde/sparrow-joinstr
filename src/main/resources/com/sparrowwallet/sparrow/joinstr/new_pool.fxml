@@ -53,6 +53,20 @@
                             </tooltip>
                         </TextField>
                     </Field>
+                    <Field text="Keyset (optional):" style="-fx-text-fill: #aaaaaa;">
+                        <TextField fx:id="autctKeysetField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
+                            <tooltip>
+                                <Tooltip text="aut-ct keyset, e.g. autct-830000-100000-1-2-1024.aks. Leave blank for no sybil resistance"/>
+                            </tooltip>
+                        </TextField>
+                    </Field>
+                    <Field text="Proving Key:" style="-fx-text-fill: #aaaaaa;">
+                        <PasswordField fx:id="autctProvingKeyField" styleClass="textfield-dark" style="-fx-max-width: 200px;">
+                            <tooltip>
+                                <Tooltip text="Taproot WIF for a UTXO in the keyset. Leave blank to use a coin from this wallet"/>
+                            </tooltip>
+                        </PasswordField>
+                    </Field>
                     <Field>
                         <VBox alignment="CENTER">
                             <ToggleButton fx:id="createButton" text="Create" onAction="#handleCreateButton"

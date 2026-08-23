@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
+import com.sparrowwallet.sparrow.joinstr.AutctJoin;
 import com.sparrowwallet.sparrow.joinstr.JoinstrMessage;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPublisher;
@@ -187,6 +188,17 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
+
+                            // a gated pool needs a key before anything is published; asking here
+                            // keeps the dialog on the fx thread
+                            final String[] provingKey = new String[] {null};
+                            if(pool.getAutctKeyset() != null && !pool.getAutctKeyset().isEmpty()) {
+                                provingKey[0] = AutctJoin.askForProvingKey(pool);
+                                if(provingKey[0] == null) {
+                                    return;
+                                }
+                            }
+
                             Identity identity = Identity.generateRandomIdentity();
                             String pubkey = identity.getPublicKey().toString();
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
@@ -196,7 +208,20 @@ public class JoinstrPoolList extends VBox {
                                 try {
 
                                     PublicKey poolPubKey = new PublicKey(pool.getPubkey());
-                                    String requestContent = JoinstrMessage.of("join_pool").toJson();
+                                    JoinstrMessage request = JoinstrMessage.of("join_pool");
+
+                                    if(pool.getAutctKeyset() != null && !pool.getAutctKeyset().isEmpty()) {
+                                        String proof = AutctJoin.proveFor(pool, provingKey[0]);
+                                        if(proof == null) {
+                                            javafx.application.Platform.runLater(() ->
+                                                    AppServices.showErrorDialog("Proof Required",
+                                                            AutctJoin.NO_PROOF));
+                                            return;
+                                        }
+                                        request.setAutctProof(proof);
+                                    }
+
+                                    String requestContent = request.toJson();
                                     List<BaseTag> tags = new ArrayList<>();
                                     tags.add(new PubKeyTag(poolPubKey)); // Send to pool creator's pubkey
 

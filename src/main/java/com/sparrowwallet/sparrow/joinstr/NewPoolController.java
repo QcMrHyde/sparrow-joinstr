@@ -43,6 +43,12 @@ public class NewPoolController extends JoinstrFormController {
     @FXML
     private TextField timeoutField;
 
+    @FXML
+    private TextField autctKeysetField;
+
+    @FXML
+    private javafx.scene.control.PasswordField autctProvingKeyField;
+
     @Override
     public void initializeView() {
         Double defaultFeeRate = AppServices.getDefaultFeeRate();
@@ -120,6 +126,12 @@ public class NewPoolController extends JoinstrFormController {
             long timeoutSeconds = PoolParameters.timeoutSeconds(timeoutText,
                     PoolParameters.DEFAULT_TIMEOUT_MINUTES);
 
+            String autctKeyset = autctKeysetField.getText().trim();
+            if(!autctKeyset.isEmpty() && !AutctPool.isValidKeyset(autctKeyset)) {
+                showError("Keyset must be named like autct-830000-100000-1-2-1024.aks");
+                return;
+            }
+
             Address bitcoinAddress;
             Wallet wallet;
 
@@ -155,7 +167,7 @@ public class NewPoolController extends JoinstrFormController {
                 }
 
                 event = nostrPublisher.publishCustomEvent(denomination, peers, bitcoinAddress.toString(),
-                        feeRate, timeoutSeconds);
+                        feeRate, timeoutSeconds, autctKeyset.isEmpty() ? null : autctKeyset);
 
                 if (event == null) {
                     showError("Failed to publish pool event");
@@ -168,6 +180,9 @@ public class NewPoolController extends JoinstrFormController {
                 JoinstrPool pool = new JoinstrPool(joinstrEvent.relay, joinstrEvent.public_key,
                         joinstrEvent.denomination, joinstrEvent.peers, joinstrEvent.timeout, poolPrivateKey);
                 pool.setPoolId(joinstrEvent.id);
+                if(!autctKeyset.isEmpty()) {
+                    pool.setAutctKeyset(autctKeyset);
+                }
                 if (joinstrEvent.fee_rate != null) {
                     pool.setFeeRate(joinstrEvent.fee_rate);
                 }
@@ -185,6 +200,8 @@ public class NewPoolController extends JoinstrFormController {
 
             denominationField.clear();
             peersField.clear();
+            autctKeysetField.clear();
+            autctProvingKeyField.clear();
             feeRateField.clear();
             timeoutField.clear();
 
@@ -220,7 +237,8 @@ public class NewPoolController extends JoinstrFormController {
             coinjoinHandler.startOutputPhase(myOutputAddress);
             logger.info("Pool creator started coinjoin flow");
 
-            shareCredentials(poolIdentity, pool.getRelay(), pool.toCredentials());
+            shareCredentials(poolIdentity, pool.getRelay(), pool.toCredentials(),
+                    autctVerifier(pool, wallet, autctProvingKeyField.getText()));
 
         } catch (Exception e) {
             logger.severe("Error starting creator coinjoin flow: " + e.getMessage());
@@ -277,9 +295,49 @@ public class NewPoolController extends JoinstrFormController {
 
     }
 
-    public static void shareCredentials(Identity poolIdentity, String relayUrl, Map<String, Object> poolCredentials) {
+    /**
+     * The verifier for a pool that demands a proof, or null when it demands none.
+     *
+     * The creator proves too, and reserves its own key image before publishing, so the first peer
+     * to replay the published proof cannot take a slot with it.
+     */
+    private AutctVerifier autctVerifier(JoinstrPool pool, Wallet wallet, String typedProvingKey) {
+        String keyset = pool.getAutctKeyset();
+        if(keyset == null || keyset.isEmpty()) {
+            return null;
+        }
+
+        AutctClient client = new AutctClient(Config.get().getAutctApiUrl());
+        String context = AutctPool.context(pool.getPoolId(), pool.getPubkey());
+        AutctVerifier verifier = new AutctVerifier(client, keyset, context);
+
+        String wif = ProvingKey.looksLikeWif(typedProvingKey)
+                ? typedProvingKey.trim()
+                : ProvingKey.fromWallet(wallet, AppServices.getCurrentBlockHeight(),
+                        0, 0, "p2tr");
+
+        if(wif == null) {
+            showError("This pool needs an aut-ct proof, but no Taproot key was given and this "
+                    + "wallet has no Taproot coin to prove with.");
+            return verifier;
+        }
+
+        AutctClient.Proof proof = client.generateProof(wif, keyset, context);
+        if(proof == null) {
+            showError("Could not generate the aut-ct proof for your own pool. Check the aut-ct "
+                    + "server and that the key is in the keyset.");
+            return verifier;
+        }
+
+        verifier.reserve(proof.keyImage());
+        return verifier;
+    }
+
+    public static void shareCredentials(Identity poolIdentity, String relayUrl,
+            Map<String, Object> poolCredentials, AutctVerifier verifier) {
 
         NostrListener listener = new NostrListener(poolIdentity, relayUrl, poolCredentials);
+        listener.setVerifier(verifier);
 
         listener.startListening((decryptedMessage, createdAt) -> {
             logger.info("Received message for credential sharing");

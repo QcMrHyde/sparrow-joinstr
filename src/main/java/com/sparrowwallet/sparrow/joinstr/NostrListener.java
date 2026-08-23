@@ -38,6 +38,7 @@ public class NostrListener implements AutoCloseable {
     private final Identity identity;
     private final String relay;
     private final Map<String, Object> poolCredentials;
+    private AutctVerifier verifier;
 
     private Client client;
     private BiConsumer<String, Long> messageHandler;
@@ -46,6 +47,11 @@ public class NostrListener implements AutoCloseable {
         this.identity = identity;
         this.relay = relay;
         this.poolCredentials = poolCredentials;
+    }
+
+    /** Set when the pool demands an aut-ct proof from every joiner. */
+    public void setVerifier(AutctVerifier verifier) {
+        this.verifier = verifier;
     }
 
     public void startListening(BiConsumer<String, Long> messageHandler) {
@@ -83,7 +89,12 @@ public class NostrListener implements AutoCloseable {
 
         try {
             if (poolCredentials != null && JoinstrMessage.isJoinRequest(decryptedContent)) {
-                handleJoinRequest(event.getPubKey());
+                String refusal = refuse(decryptedContent);
+                if (refusal != null) {
+                    sendReject(event.getPubKey(), refusal);
+                } else {
+                    handleJoinRequest(event.getPubKey());
+                }
             }
 
             if (messageHandler != null) {
@@ -110,6 +121,43 @@ public class NostrListener implements AutoCloseable {
             }
         }
         return false;
+    }
+
+    /** Why this join request must be refused, or null to answer it with credentials. */
+    private String refuse(String decryptedContent) {
+        if (verifier == null) {
+            return null;
+        }
+
+        try {
+            return verifier.rejectionReason(JoinstrMessage.fromJson(decryptedContent).getAutctProof());
+        } catch (Exception e) {
+            logger.warning("Could not read the aut-ct proof from a join request");
+            return AutctVerifier.INVALID_PROOF;
+        }
+    }
+
+    private void sendReject(PublicKey requester, String reason) {
+        try {
+            JoinstrMessage reject = JoinstrMessage.of("reject");
+            reject.setReason(reason);
+
+            List<BaseTag> tags = new ArrayList<>();
+            tags.add(new PubKeyTag(requester));
+
+            NIP04 nip04 = new NIP04(identity, requester);
+            String encrypted = nip04.encrypt(identity, reject.toJson(), requester);
+
+            GenericEvent event = new GenericEvent(identity.getPublicKey(),
+                    Kind.ENCRYPTED_DIRECT_MESSAGE.getValue(), tags, encrypted);
+            nip04.setEvent(event);
+            nip04.sign();
+
+            JoinstrPublisher.publish(identity, relay, event);
+            logger.info("Refused a join request: " + reason);
+        } catch (Exception e) {
+            logger.severe("Failed to send a reject: " + e.getMessage());
+        }
     }
 
     private void handleJoinRequest(PublicKey requester) {

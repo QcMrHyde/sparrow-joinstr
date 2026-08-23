@@ -187,6 +187,7 @@ public class OtherPoolsController extends JoinstrFormController {
         }
 
         pool.setRequirement(PoolSupport.autctRequirement(poolData));
+        pool.setAutctKeyset(AutctPool.keysetOf(poolData));
 
         String unsupported = PoolSupport.unsupportedReason(poolData);
         pool.setUnsupportedReason(unsupported);
