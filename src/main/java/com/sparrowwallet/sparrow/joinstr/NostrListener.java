@@ -1,140 +1,118 @@
 package com.sparrowwallet.sparrow.joinstr;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.google.gson.Gson;
+
 import nostr.api.NIP04;
 import nostr.base.PublicKey;
 import nostr.client.Client;
 import nostr.context.impl.DefaultRequestContext;
+import nostr.event.BaseMessage;
 import nostr.event.BaseTag;
 import nostr.event.Kind;
 import nostr.event.impl.Filters;
 import nostr.event.impl.GenericEvent;
+import nostr.event.message.EventMessage;
 import nostr.event.message.ReqMessage;
 import nostr.event.tag.PubKeyTag;
 import nostr.id.Identity;
-import com.sparrowwallet.sparrow.AppServices;
-import com.sparrowwallet.sparrow.net.TorUtils;
 
-import java.util.*;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
 import java.util.concurrent.TimeoutException;
-import java.util.logging.ConsoleHandler;
-import java.util.logging.Level;
-import java.util.logging.Logger;
-import java.util.logging.Handler;
 import java.util.function.BiConsumer;
+import java.util.logging.Logger;
 
+/**
+ * Receives the encrypted messages addressed to one key on a pool's relay.
+ *
+ * Events arrive through the nostr client's message listener. This used to work by attaching a
+ * handler to the library's own logger and parsing the log lines, which needed every message
+ * logged at INFO and broke on any change to the log format.
+ */
 public class NostrListener implements AutoCloseable {
+
     private static final Logger logger = Logger.getLogger(NostrListener.class.getName());
-    private static final Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
+
     private final Identity identity;
     private final String relay;
+    private final Map<String, Object> poolCredentials;
+
     private Client client;
     private BiConsumer<String, Long> messageHandler;
-    private final Map<String, Object> poolCredentials;
-    private static final ConsoleHandler consoleLogHandler = new ConsoleHandler();
-    private transient Handler eventMessageHandler = null;
 
     public NostrListener(Identity identity, String relay, Map<String, Object> poolCredentials) {
         this.identity = identity;
         this.relay = relay;
         this.poolCredentials = poolCredentials;
-        setupLogging();
-    }
-
-    private static void setupLogging() {
-        textLogger.setLevel(Level.INFO);
-        consoleLogHandler.setLevel(Level.INFO);
-        synchronized (textLogger) {
-            if (textLogger.getHandlers().length == 0)
-                textLogger.addHandler(consoleLogHandler);
-        }
     }
 
     public void startListening(BiConsumer<String, Long> messageHandler) {
         this.messageHandler = messageHandler;
-        setupEventHandler();
         connectAndSubscribe();
     }
 
-    private void setupEventHandler() {
-        eventMessageHandler = new Handler() {
-            @Override
-            public void publish(java.util.logging.LogRecord record) {
-                String message = record.getMessage();
-                if (message != null && message.contains("WebSocket received: [\"EVENT\"")) {
-                    handleEventMessage(message);
-                }
-            }
+    /** Called for every message the relay sends on this connection. */
+    private void onRelayMessage(BaseMessage message) {
+        if (!(message instanceof EventMessage eventMessage)) {
+            return;
+        }
 
-            @Override
-            public void flush() {
-            }
+        if (!(eventMessage.getEvent() instanceof GenericEvent event)) {
+            return;
+        }
 
-            @Override
-            public void close() {
-            }
-        };
-        textLogger.addHandler(eventMessageHandler);
-    }
+        if (event.getKind() == null || event.getKind() != Kind.ENCRYPTED_DIRECT_MESSAGE.getValue()) {
+            return;
+        }
 
-    private void handleEventMessage(String message) {
+        if (!isAddressedToUs(event)) {
+            return;
+        }
+
+        logger.fine("Received an encrypted DM addressed to this key");
+
+        String decryptedContent;
         try {
-            int startIndex = message.indexOf("{");
-            int endIndex = message.lastIndexOf("}") + 1;
-            String eventJson = message.substring(startIndex, endIndex);
+            decryptedContent = NIP04.decrypt(identity, event.getContent(), event.getPubKey());
+        } catch (Exception e) {
+            logger.fine("Could not decrypt a message addressed to this key");
+            return;
+        }
 
-            ObjectMapper mapper = new ObjectMapper();
-            JsonNode event = mapper.readTree(eventJson);
-
-            String encryptedContent = event.get("content").asText();
-            String senderPubkey = event.get("pubkey").asText();
-            long timestamp = event.get("created_at").asLong();
-
-            JsonNode tags = event.get("tags");
-            String recipientPubkey = null;
-            if (tags != null && tags.isArray()) {
-                for (JsonNode tag : tags) {
-                    if (tag.isArray() && !tag.isEmpty() && "p".equals(tag.get(0).asText())) {
-                        recipientPubkey = tag.get(1).asText();
-                        break;
-                    }
-                }
+        try {
+            if (poolCredentials != null && JoinstrMessage.isJoinRequest(decryptedContent)) {
+                handleJoinRequest(event.getPubKey());
             }
 
-            if (recipientPubkey == null || !recipientPubkey.equals(identity.getPublicKey().toString())) {
-                return;
-            }
-
-            logger.fine("Received an encrypted DM addressed to this key");
-
-            try {
-                String decryptedContent = NIP04.decrypt(
-                        identity,
-                        encryptedContent,
-                        new PublicKey(senderPubkey));
-
-                // matching the raw text depended on the sender's json whitespace, so a peer
-                // serialising compactly was never answered
-                if (poolCredentials != null && JoinstrMessage.isJoinRequest(decryptedContent)) {
-                    handleJoinRequest(senderPubkey);
-                }
-
-                if (messageHandler != null) {
-                    messageHandler.accept(decryptedContent, timestamp);
-                }
-
-                logger.info("Successfully decrypted message");
-            } catch (Exception e) {
-                logger.fine("Failed to decrypt message (may not be for us): " + e.getMessage());
+            if (messageHandler != null) {
+                long createdAt = event.getCreatedAt() == null
+                        ? java.time.Instant.now().getEpochSecond()
+                        : event.getCreatedAt();
+                messageHandler.accept(decryptedContent, createdAt);
             }
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.severe("Error handling a pool message: " + e.getMessage());
         }
     }
 
-    private void handleJoinRequest(String requesterPubkey) {
+    private boolean isAddressedToUs(GenericEvent event) {
+        if (event.getTags() == null) {
+            return false;
+        }
+
+        String ours = identity.getPublicKey().toString();
+        for (BaseTag tag : event.getTags()) {
+            if (tag instanceof PubKeyTag pubKeyTag && pubKeyTag.getPublicKey() != null
+                    && ours.equals(pubKeyTag.getPublicKey().toString())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void handleJoinRequest(PublicKey requester) {
         if (poolCredentials == null) {
             logger.warning("Received join request but poolCredentials is null - ignoring");
             return;
@@ -142,21 +120,17 @@ public class NostrListener implements AutoCloseable {
 
         try {
             if (!JoinstrTransport.newCircuit()) {
-                throw new IllegalStateException(JoinstrTransport.NOT_READY);
+                logger.warning("Not answering a join request: tor is not running");
+                return;
             }
 
-            // Send the payload as built. Re-picking keys here silently dropped any the caller
-            // had not supplied, and turned every value into a string.
             String credentialsJson = new Gson().toJson(poolCredentials);
 
             List<BaseTag> tags = new ArrayList<>();
-            tags.add(new PubKeyTag(new PublicKey(requesterPubkey)));
+            tags.add(new PubKeyTag(requester));
 
-            NIP04 nip04 = new NIP04(identity, new PublicKey(requesterPubkey));
-            String encryptedCredentials = nip04.encrypt(
-                    identity,
-                    credentialsJson,
-                    new PublicKey(requesterPubkey));
+            NIP04 nip04 = new NIP04(identity, requester);
+            String encryptedCredentials = nip04.encrypt(identity, credentialsJson, requester);
 
             GenericEvent credentialsEvent = new GenericEvent(
                     identity.getPublicKey(),
@@ -168,10 +142,9 @@ public class NostrListener implements AutoCloseable {
             nip04.sign();
             nip04.send(Map.of("default", relay));
 
-            logger.info("Sent pool credentials to: " + requesterPubkey);
+            logger.info("Sent pool credentials to a joiner");
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
-            e.printStackTrace();
+            logger.severe("Failed to send pool credentials: " + e.getMessage());
         }
     }
 
@@ -182,35 +155,32 @@ public class NostrListener implements AutoCloseable {
             }
 
             client = Client.getInstance();
+
             DefaultRequestContext context = new DefaultRequestContext();
             context.setPrivateKey(identity.getPrivateKey().getRawData());
-            context.setRelays(Map.of("default", relay));
+            context.setRelays(new LinkedHashMap<>(Map.of("default", relay)));
+            context.setProxy(JoinstrTransport.proxy());
+            context.setMessageListener((message, source) -> onRelayMessage(message));
 
             Filters filters = Filters.builder()
                     .kinds(List.of(Kind.ENCRYPTED_DIRECT_MESSAGE))
                     .referencePubKeys(List.of(identity.getPublicKey()))
                     .build();
 
-            String subId = "joinstr-" + System.currentTimeMillis();
-            ReqMessage reqMessage = new ReqMessage(subId, filters);
+            ReqMessage reqMessage = new ReqMessage("joinstr-" + System.currentTimeMillis(), filters);
 
             client.connect(context);
             client.send(reqMessage);
 
-            logger.info("Started listening for encrypted messages on " + relay);
+            logger.info("Started listening for encrypted messages");
         } catch (Exception e) {
-            logger.severe("Error: " + e.getMessage());
+            logger.severe("Failed to start listener: " + e.getMessage());
             throw new RuntimeException("Failed to start listener", e);
         }
     }
 
     @Override
     public void close() throws TimeoutException {
-        if (eventMessageHandler != null) {
-            textLogger.removeHandler(eventMessageHandler);
-            eventMessageHandler = null;
-        }
-
         if (client != null) {
             client.disconnect();
             client = null;

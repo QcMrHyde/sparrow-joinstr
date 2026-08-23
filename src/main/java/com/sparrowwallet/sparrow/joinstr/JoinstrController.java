@@ -67,7 +67,7 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
         // Ensure Tor is running for Joinstr circuit isolation
         AppServices.get().startTor();
         // Route nostr-java WebSocket connections through Tor SOCKS proxy
-        applyTorSocksProxy();
+        awaitTor();
 
         joinstrMenu.selectedToggleProperty().addListener((observable, oldValue, selectedToggle) -> {
             if(selectedToggle == null) {
@@ -189,10 +189,12 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
     }
 
     /**
-     * Sets JVM-wide SOCKS proxy properties so nostr-java WebSocket connections
-     * are routed through Tor. Polls until Tor is ready (up to 90s).
+     * Wait for Tor before any joinstr traffic is possible, and say so if it never arrives.
+     *
+     * The proxy itself is applied per nostr connection by JoinstrTransport, so no JVM wide system
+     * property is set and the rest of Sparrow's traffic is unaffected.
      */
-    private void applyTorSocksProxy() {
+    private void awaitTor() {
         Thread t = new Thread(() -> {
             try {
                 int waited = 0;
@@ -201,11 +203,7 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
                     waited += 2;
                 }
                 if (AppServices.isTorRunning()) {
-                    HostAndPort proxy = AppServices.getTorProxy();
-                    System.setProperty("socksProxyHost", proxy.getHost());
-                    System.setProperty("socksProxyPort", String.valueOf(proxy.getPort()));
-                    log.info("[Joinstr] Nostr connections routed through Tor SOCKS proxy {}:{}",
-                            proxy.getHost(), proxy.getPort());
+                    log.info("[Joinstr] Tor is running, joinstr requests will use it");
                 } else {
                     log.warn("[Joinstr] Tor not ready after 90s, joinstr requests will be refused");
                     javafx.application.Platform.runLater(() -> AppServices.showErrorDialog(
@@ -216,7 +214,7 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
             }
         });
         t.setDaemon(true);
-        t.setName("TorProxyApplier");
+        t.setName("TorReadinessWatcher");
         t.start();
     }
 
@@ -228,10 +226,6 @@ public class JoinstrController extends JoinstrFormController implements IThreadE
                 formController.close();
             }
             controllerCache.clear();
-
-            // Clear the JVM SOCKS proxy so normal Sparrow traffic is unaffected
-            System.clearProperty("socksProxyHost");
-            System.clearProperty("socksProxyPort");
 
             shutdownThreads();
             stage.close();

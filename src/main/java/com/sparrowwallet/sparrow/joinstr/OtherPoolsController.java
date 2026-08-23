@@ -17,21 +17,22 @@ import nostr.client.Client;
 import nostr.context.impl.DefaultRequestContext;
 import nostr.event.Kind;
 import nostr.event.impl.Filters;
+import nostr.event.impl.GenericEvent;
+import nostr.event.message.EventMessage;
 import nostr.event.message.ReqMessage;
 import nostr.id.Identity;
 
 import java.time.Instant;
 import java.util.*;
+import java.util.LinkedHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicBoolean;
-import java.util.logging.Level;
 import java.util.logging.Logger;
 
 public class OtherPoolsController extends JoinstrFormController {
 
     private static final int POOL_REFRESH_TIME = 30000;
     private static final Logger logger = Logger.getLogger(OtherPoolsController.class.getName());
-    private static final Logger textLogger = Logger.getLogger("nostr.connection.impl.listeners.TextListener");
 
     @FXML
     private VBox contentVBox;
@@ -46,7 +47,6 @@ public class OtherPoolsController extends JoinstrFormController {
 
     private ArrayList<JoinstrPool> myPools;
 
-    private java.util.logging.Handler currentEventHandler;
     private final AtomicBoolean isFetching = new AtomicBoolean(false);
 
     /**
@@ -133,6 +133,62 @@ public class OtherPoolsController extends JoinstrFormController {
         }, POOL_REFRESH_TIME, POOL_REFRESH_TIME); // Refresh every 30 seconds
     }
 
+    /**
+     * Build a pool from an announcement, or null if it is not one this client should list.
+     *
+     * The announcement must be signed by the pool key it advertises. Without that check anyone
+     * can announce a pool naming someone else's key, and a joiner sends its request to whoever
+     * that key belongs to.
+     */
+    static JoinstrPool parsePool(JsonNode poolData, String authorPubKey) {
+        if (poolData == null || !poolData.has("timeout")) {
+            return null;
+        }
+
+        long timeout = poolData.get("timeout").asLong();
+        if (timeout < Instant.now().getEpochSecond()) {
+            return null;
+        }
+
+        String relayUrl = extractRelay(poolData);
+        if (relayUrl == null || relayUrl.isEmpty()
+                || !networkMatches(poolData)
+                || !poolData.has("public_key")
+                || !poolData.has("denomination")
+                || !poolData.has("peers")) {
+            return null;
+        }
+
+        String poolKey = poolData.get("public_key").asText();
+        if (authorPubKey != null && !authorPubKey.equalsIgnoreCase(poolKey)) {
+            logger.warning("Ignoring a pool announcement that is not signed by the key it names");
+            return null;
+        }
+
+        JoinstrPool pool = new JoinstrPool(
+                relayUrl,
+                poolKey,
+                poolData.get("denomination").asText(),
+                poolData.get("peers").asText(),
+                String.valueOf(timeout));
+
+        if (poolData.has("fee_rate")) {
+            pool.setFeeRate(poolData.get("fee_rate").asText());
+        }
+
+        if (poolData.has("id")) {
+            pool.setPoolId(poolData.get("id").asText());
+        }
+
+        String unsupported = PoolSupport.unsupportedReason(poolData);
+        pool.setUnsupportedReason(unsupported);
+        if (unsupported != null) {
+            pool.setStatus("Unsupported");
+        }
+
+        return pool;
+    }
+
     private void fetchPools() {
         if (CoinjoinActivity.isActive()) {
             // discovery rotates the tor circuit, which disconnects the shared nostr client and
@@ -146,149 +202,83 @@ public class OtherPoolsController extends JoinstrFormController {
         }
 
         this.getJoinstrController().submitTask(() -> {
+            List<JoinstrPool> pools = new CopyOnWriteArrayList<>();
+            ObjectMapper mapper = new ObjectMapper();
+            Client client = Client.getInstance();
+
             try {
-                textLogger.setLevel(Level.INFO);
-
-                if (currentEventHandler != null) {
-                    textLogger.removeHandler(currentEventHandler);
+                if (!JoinstrTransport.newCircuit()) {
+                    Platform.runLater(() -> showError(JoinstrTransport.NOT_READY));
+                    return;
                 }
-
-                List<JoinstrPool> pools = new CopyOnWriteArrayList<>();
-                ObjectMapper mapper = new ObjectMapper();
-
-                currentEventHandler = new java.util.logging.Handler() {
-                    @Override
-                    public void publish(java.util.logging.LogRecord record) {
-                        String message = record.getMessage();
-                        if (message != null && message.contains("WebSocket received: [\"EVENT\"")) {
-                            try {
-                                int startIndex = message.indexOf("{");
-                                int endIndex = message.lastIndexOf("}") + 1;
-                                if (startIndex >= 0 && endIndex > startIndex) {
-                                    String eventJson = message.substring(startIndex, endIndex);
-                                    JsonNode event = mapper.readTree(eventJson);
-
-                                    if (event.has("content")) {
-                                        JsonNode poolData = mapper.readTree(event.get("content").asText());
-
-                                        if (poolData.has("timeout")) {
-                                            long timeout = poolData.get("timeout").asLong();
-                                            if (timeout < Instant.now().getEpochSecond()) {
-                                                return;
-                                            }
-
-                                            String relayUrl = extractRelay(poolData);
-                                            if (relayUrl == null || relayUrl.isEmpty()
-                                                    || !networkMatches(poolData)
-                                                    || !poolData.has("public_key")
-                                                    || !poolData.has("denomination")
-                                                    || !poolData.has("peers")) {
-                                                return;
-                                            }
-
-                                            JoinstrPool pool = new JoinstrPool(
-                                                    relayUrl,
-                                                    poolData.get("public_key").asText(),
-                                                    poolData.get("denomination").asText(),
-                                                    poolData.get("peers").asText(),
-                                                    String.valueOf(timeout));
-
-                                            if (poolData.has("fee_rate")) {
-                                                pool.setFeeRate(poolData.get("fee_rate").asText());
-                                            }
-
-                                            if (poolData.has("id")) {
-                                                pool.setPoolId(poolData.get("id").asText());
-                                            }
-
-                                            String unsupported = PoolSupport.unsupportedReason(poolData);
-                                            pool.setUnsupportedReason(unsupported);
-                                            if (unsupported != null) {
-                                                pool.setStatus("Unsupported");
-                                            }
-
-                                            if (pools.stream().noneMatch(
-                                                    (p) -> Objects.equals(p.getPubkey(), pool.getPubkey())) &&
-                                                    myPools.stream().noneMatch(
-                                                            (p) -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
-
-                                                pools.add(pool);
-                                                logger.info("Added pool: " + pool.getRelay() + " - "
-                                                        + pool.getDenomination());
-                                                Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
-
-                                            }
-
-                                        }
-                                    }
-                                }
-                            } catch (Exception e) {
-                                logger.warning("Error processing pool event: " + e.getMessage());
-                            }
-                        }
-                    }
-
-                    @Override
-                    public void flush() {
-                    }
-
-                    @Override
-                    public void close() {
-                    }
-                };
-
-                textLogger.addHandler(currentEventHandler);
 
                 Identity identity = Identity.generateRandomIdentity();
 
-                // Pools are dropped by their own timeout below, so do not also drop them by the
-                // age of the announcement. A pool open for longer than an hour was invisible.
+                DefaultRequestContext context = new DefaultRequestContext();
+                context.setPrivateKey(identity.getPrivateKey().getRawData());
+                context.setRelays(new LinkedHashMap<>(Map.of("default",
+                        JoinstrRelay.relayOrDefault(Config.get().getNostrRelay()))));
+                context.setProxy(JoinstrTransport.proxy());
+                context.setMessageListener((message, source) -> {
+                    if (!(message instanceof EventMessage eventMessage)
+                            || !(eventMessage.getEvent() instanceof GenericEvent event)) {
+                        return;
+                    }
+                    if (event.getKind() == null || event.getKind() != Kind.CONJOIN_POOL.getValue()) {
+                        return;
+                    }
+
+                    try {
+                        JsonNode poolData = mapper.readTree(event.getContent());
+                        String author = event.getPubKey() == null ? null : event.getPubKey().toString();
+                        JoinstrPool pool = parsePool(poolData, author);
+                        if (pool == null) {
+                            return;
+                        }
+
+                        if (pools.stream().noneMatch(p -> Objects.equals(p.getPubkey(), pool.getPubkey()))
+                                && myPools.stream().noneMatch(p -> Objects.equals(p.getPubkey(), pool.getPubkey()))) {
+                            pools.add(pool);
+                            logger.info("Added a discovered pool");
+                            Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
+                        }
+                    } catch (Exception e) {
+                        logger.warning("Error processing pool event: " + e.getMessage());
+                    }
+                });
+
+                // Pools are dropped by their own timeout in parsePool, so do not also drop them
+                // by the age of the announcement. A pool open for longer than an hour was invisible.
                 Filters filters = Filters.builder()
                         .kinds(List.of(Kind.CONJOIN_POOL))
                         .build();
 
-                String subId = "pools-" + System.currentTimeMillis();
-                ReqMessage reqMessage = new ReqMessage(subId, filters);
+                ReqMessage reqMessage = new ReqMessage("pools-" + System.currentTimeMillis(), filters);
 
-                Client client = Client.getInstance();
-                DefaultRequestContext context = new DefaultRequestContext();
-                context.setPrivateKey(identity.getPrivateKey().getRawData());
-                context.setRelays(Map.of("default",
-                        JoinstrRelay.relayOrDefault(Config.get().getNostrRelay())));
+                client.connect(context);
+                client.send(reqMessage);
 
-                try {
-                    if (!JoinstrTransport.newCircuit()) {
-                        Platform.runLater(() -> showError(JoinstrTransport.NOT_READY));
-                        return;
-                    }
+                Thread.sleep(5000);
 
-                    client.connect(context);
-                    client.send(reqMessage);
+                Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
 
-                    Thread.sleep(5000);
-
-                    textLogger.removeHandler(currentEventHandler);
-                    currentEventHandler = null;
-
-                    Platform.runLater(() -> updateUIWithPools(new ArrayList<>(pools)));
-
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    logger.warning("Sleep interrupted: " + e.getMessage());
-                } finally {
-                    if (!Thread.currentThread().isInterrupted())
-                        client.disconnect();
-                    isFetching.set(false);
-                }
-
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                logger.warning("Pool discovery interrupted");
             } catch (Exception e) {
                 logger.severe("Error fetching pools: " + e.getMessage());
-                e.printStackTrace();
                 Platform.runLater(() -> showError("Failed to fetch pools: " + e.getMessage()));
+            } finally {
+                try {
+                    if (!Thread.currentThread().isInterrupted()) {
+                        client.disconnect();
+                    }
+                } catch (Exception e) {
+                    logger.fine("Error disconnecting after discovery: " + e.getMessage());
+                }
                 isFetching.set(false);
             }
         });
-
     }
 
     private void updateUIWithPools(List<JoinstrPool> pools) {
@@ -319,11 +309,6 @@ public class OtherPoolsController extends JoinstrFormController {
 
     @Override
     public void close() throws Exception {
-        if (currentEventHandler != null) {
-            textLogger.removeHandler(currentEventHandler);
-            currentEventHandler = null;
-        }
-
         if (poolRefreshTimer != null) {
             poolRefreshTimer.cancel();
             poolRefreshTimer = null;

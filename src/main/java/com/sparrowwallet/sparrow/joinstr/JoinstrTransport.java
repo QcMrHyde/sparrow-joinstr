@@ -6,6 +6,8 @@ import com.sparrowwallet.sparrow.net.TorUtils;
 
 import nostr.client.Client;
 
+import java.net.InetSocketAddress;
+import java.net.Proxy;
 import java.util.function.BooleanSupplier;
 import java.util.logging.Logger;
 
@@ -33,6 +35,25 @@ public final class JoinstrTransport {
 
     public static boolean isReady() {
         return torRunning.getAsBoolean();
+    }
+
+    /**
+     * The proxy joinstr connections go through, or null when there is none.
+     *
+     * This is handed to each nostr connection rather than set as a JVM wide system property, so
+     * unrelated Sparrow traffic is unaffected.
+     */
+    public static Proxy proxy() {
+        if (!isReady()) {
+            return null;
+        }
+
+        HostAndPort torProxy = AppServices.getTorProxy();
+        if (torProxy == null) {
+            return null;
+        }
+
+        return new Proxy(Proxy.Type.SOCKS, new InetSocketAddress(torProxy.getHost(), torProxy.getPort()));
     }
 
     /** Why this request must not be sent, or null if it may be. */
