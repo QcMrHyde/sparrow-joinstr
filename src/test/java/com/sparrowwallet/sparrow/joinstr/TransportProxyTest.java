@@ -16,6 +16,41 @@ public class TransportProxyTest {
         JoinstrTransport.setTorRunningForTesting(null);
     }
 
+    /**
+     * A loopback relay cannot be reached through Tor, so forcing the proxy makes a local relay
+     * unusable for testing. Nothing leaves the machine, so there is nothing to hide.
+     */
+    @Test
+    public void aLocalRelayNeedsNoTor() {
+        JoinstrTransport.setTorRunningForTesting(() -> false);
+
+        assertTrue(JoinstrTransport.isLoopback("ws://127.0.0.1:7777"));
+        assertTrue(JoinstrTransport.isLoopback("ws://localhost:7777"));
+        assertTrue(JoinstrTransport.isReadyFor("ws://127.0.0.1:7777"));
+        assertTrue(JoinstrTransport.newCircuitFor("ws://127.0.0.1:7777"));
+        assertNull(JoinstrTransport.proxy("ws://127.0.0.1:7777"));
+    }
+
+    /** Everything else still goes through Tor, and is refused when Tor is down. */
+    @Test
+    public void aRemoteRelayStillNeedsTor() {
+        JoinstrTransport.setTorRunningForTesting(() -> false);
+
+        assertFalse(JoinstrTransport.isLoopback("wss://nos.lol"));
+        assertFalse(JoinstrTransport.isReadyFor("wss://nos.lol"));
+        assertFalse(JoinstrTransport.newCircuitFor("wss://nos.lol"));
+    }
+
+    /** A host merely containing "localhost" is not loopback. */
+    @Test
+    public void aLookalikeHostIsNotTreatedAsLocal() {
+        JoinstrTransport.setTorRunningForTesting(() -> false);
+
+        assertFalse(JoinstrTransport.isLoopback("wss://localhost.evil.com"));
+        assertFalse(JoinstrTransport.isLoopback("wss://127.0.0.1.evil.com"));
+        assertFalse(JoinstrTransport.isReadyFor("wss://localhost.evil.com"));
+    }
+
     @Test
     public void thereIsNoProxyWhenTorIsDown() {
         JoinstrTransport.setTorRunningForTesting(() -> false);
