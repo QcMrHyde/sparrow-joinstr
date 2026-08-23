@@ -110,7 +110,15 @@ public class CoinjoinHandler {
 
         sendOutputToPool(myOutputAddress);
 
-        startListeningForMessages();
+        try {
+            startListeningForMessages();
+        } catch (Exception e) {
+            // without a subscription the coinjoin cannot progress, so end it here rather than
+            // leaving it holding off pool discovery for the rest of the session
+            logger.severe("Could not start listening for pool messages: " + e.getMessage());
+            updateStatus("Error: Check logs");
+            stopListening();
+        }
     }
 
     /**
@@ -812,6 +820,13 @@ public class CoinjoinHandler {
         } catch (Exception e) {
             logger.severe("Error broadcasting transaction: " + e.getMessage());
             updateStatus("Error: Check logs");
+        }
+    }
+
+    /** Take the discovery hold without needing a relay, for tests. */
+    void holdDiscoveryForTesting() {
+        if (holdingDiscovery.compareAndSet(false, true)) {
+            CoinjoinActivity.started();
         }
     }
 
