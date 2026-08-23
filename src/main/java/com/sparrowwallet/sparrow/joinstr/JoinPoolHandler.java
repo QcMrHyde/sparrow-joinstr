@@ -291,8 +291,10 @@ public class JoinPoolHandler {
             Storage storage = selectedWallet.getValue();
 
             WalletForm walletForm = new WalletForm(storage, wallet);
-            NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);
-            Address myOutputAddress = freshEntry.getAddress();
+            Address myOutputAddress = OutputAddress.fresh(walletForm);
+            if (myOutputAddress == null) {
+                throw new IllegalStateException("no receive address available for the coinjoin");
+            }
 
             coinjoinHandler = new CoinjoinHandler(poolIdentity, pool, wallet, storage, statusCallback);
             coinjoinHandler.setFeeRate(feeRate);

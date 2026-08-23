@@ -45,8 +45,7 @@ public class NostrPublisher implements AutoCloseable {
     public Address getNewReceiveAddress(Storage storage, Wallet wallet) {
         WalletForm walletForm = new WalletForm(storage, wallet);
         EventManager.get().register(walletForm);
-        NodeEntry freshEntry = walletForm.getFreshNodeEntry(KeyPurpose.RECEIVE, null);
-        return freshEntry.getAddress();
+        return OutputAddress.fresh(walletForm);
     }
 
     public GenericEvent publishCustomEvent(String denomination, String peers, String bitcoinAddress,

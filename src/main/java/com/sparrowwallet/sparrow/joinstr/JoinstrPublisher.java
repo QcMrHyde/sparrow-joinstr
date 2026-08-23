@@ -6,9 +6,14 @@ import nostr.event.impl.GenericEvent;
 import nostr.event.message.EventMessage;
 import nostr.id.Identity;
 
+import nostr.event.message.OkMessage;
+
 import java.net.Proxy;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.logging.Logger;
 
 /**
@@ -24,13 +29,8 @@ public final class JoinstrPublisher {
 
     private static final Logger logger = Logger.getLogger(JoinstrPublisher.class.getName());
 
-    /**
-     * How long to let a send drain before closing the connection.
-     *
-     * {@code Client.send} is fire and forget with no completion signal, so closing immediately can
-     * drop the message on the floor.
-     */
-    private static final long FLUSH_MILLIS = 750;
+    /** How long to wait for the relay to acknowledge an event. */
+    private static final long ACK_TIMEOUT_MILLIS = 10000;
 
     private JoinstrPublisher() {
     }
@@ -44,20 +44,47 @@ public final class JoinstrPublisher {
         return context;
     }
 
-    /** Publish a signed event. Returns false if it could not be sent. */
+    /**
+     * Publish a signed event and wait for the relay to accept it.
+     *
+     * {@code Client.send} is fire and forget, so without waiting for the relay's OK a publish that
+     * never arrived looks the same as one that did, and the pool stalls with no explanation. The
+     * relay's acknowledgement is delivered through the same message listener that carries events.
+     */
     public static boolean publish(Identity as, String relay, GenericEvent signedEvent) {
         if (!JoinstrTransport.newCircuit()) {
             logger.warning("Not publishing: tor is not running");
             return false;
         }
 
+        String eventId = signedEvent.getId();
+        CountDownLatch acknowledged = new CountDownLatch(1);
+        AtomicBoolean accepted = new AtomicBoolean(false);
+
         Client client = new Client();
         try {
-            client.connect(context(as, relay, JoinstrTransport.proxy()));
+            DefaultRequestContext context = context(as, relay, JoinstrTransport.proxy());
+            context.setMessageListener((message, source) -> {
+                if (message instanceof OkMessage ok
+                        && (eventId == null || eventId.equals(ok.getEventId()))) {
+                    accepted.set(Boolean.TRUE.equals(ok.getFlag()));
+                    if (!accepted.get()) {
+                        logger.warning("Relay rejected an event: " + ok.getMessage());
+                    }
+                    acknowledged.countDown();
+                }
+            });
+
+            client.connect(context);
             client.send(new EventMessage(signedEvent));
 
-            Thread.sleep(FLUSH_MILLIS);
-            return true;
+            if (!acknowledged.await(ACK_TIMEOUT_MILLIS, TimeUnit.MILLISECONDS)) {
+                logger.warning("Relay did not acknowledge an event within "
+                        + (ACK_TIMEOUT_MILLIS / 1000) + "s");
+                return false;
+            }
+
+            return accepted.get();
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
             return false;
