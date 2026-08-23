@@ -141,21 +141,9 @@ public class NostrListener implements AutoCloseable {
             nip04.setEvent(credentialsEvent);
             nip04.sign();
 
-            // a connection of its own: answering a join request must not close our subscription
-            Client publisher = new Client();
-            try {
-                DefaultRequestContext context = new DefaultRequestContext();
-                context.setPrivateKey(identity.getPrivateKey().getRawData());
-                context.setRelays(new LinkedHashMap<>(Map.of("default", relay)));
-                context.setProxy(JoinstrTransport.proxy());
-                publisher.connect(context);
-                nip04.send(Map.of("default", relay));
-            } finally {
-                try {
-                    publisher.disconnect();
-                } catch (Exception e) {
-                    logger.fine("Error closing the credentials connection: " + e.getMessage());
-                }
+            if (!JoinstrPublisher.publish(identity, relay, credentialsEvent)) {
+                logger.severe("Failed to send pool credentials");
+                return;
             }
 
             logger.info("Sent pool credentials to a joiner");
@@ -172,10 +160,8 @@ public class NostrListener implements AutoCloseable {
 
             client = new Client();
 
-            DefaultRequestContext context = new DefaultRequestContext();
-            context.setPrivateKey(identity.getPrivateKey().getRawData());
-            context.setRelays(new LinkedHashMap<>(Map.of("default", relay)));
-            context.setProxy(JoinstrTransport.proxy());
+            DefaultRequestContext context = JoinstrPublisher.context(identity, relay,
+                    JoinstrTransport.proxy());
             context.setMessageListener((message, source) -> onRelayMessage(message));
 
             Filters filters = Filters.builder()

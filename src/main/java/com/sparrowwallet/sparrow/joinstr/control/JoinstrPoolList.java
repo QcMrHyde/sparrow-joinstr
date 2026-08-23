@@ -2,6 +2,7 @@ package com.sparrowwallet.sparrow.joinstr.control;
 
 import com.sparrowwallet.sparrow.joinstr.JoinstrMessage;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
+import com.sparrowwallet.sparrow.joinstr.JoinstrPublisher;
 import com.sparrowwallet.sparrow.joinstr.JoinstrTransport;
 import com.sparrowwallet.sparrow.control.QRDisplayDialog;
 
@@ -184,10 +185,6 @@ public class JoinstrPoolList extends VBox {
 
                         joinButton.setOnAction(event -> {
                             JoinstrPool pool = getTableView().getItems().get(getIndex());
-                            if(!pool.isJoinable()) {
-                                AppServices.showErrorDialog("Pool Not Supported", pool.getUnsupportedReason());
-                                return;
-                            }
                             Identity identity = Identity.generateRandomIdentity();
                             String pubkey = identity.getPublicKey().toString();
                             QRDisplayDialog qrDialog = new QRDisplayDialog(pubkey);
@@ -195,12 +192,6 @@ public class JoinstrPoolList extends VBox {
 
                             new Thread(() -> {
                                 try {
-                                    if(!JoinstrTransport.newCircuit()) {
-                                        javafx.application.Platform.runLater(() ->
-                                                AppServices.showErrorDialog("Tor Not Running",
-                                                        JoinstrTransport.NOT_READY));
-                                        return;
-                                    }
 
                                     PublicKey poolPubKey = new PublicKey(pool.getPubkey());
                                     String requestContent = JoinstrMessage.of("join_pool").toJson();
@@ -216,25 +207,15 @@ public class JoinstrPoolList extends VBox {
                                             tags,
                                             encryptedContent);
 
-                                    Client joinClient = new Client();
                                     nip04.setEvent(encrypted_event);
                                     nip04.sign();
 
-                                    {
-                                        DefaultRequestContext context = new DefaultRequestContext();
-                                        context.setPrivateKey(identity.getPrivateKey().getRawData());
-                                        context.setRelays(new java.util.LinkedHashMap<>(
-                                                Map.of("default", pool.getRelay())));
-                                        context.setProxy(JoinstrTransport.proxy());
-                                        joinClient.connect(context);
-                                    }
 
-                                    nip04.send(Map.of("default", pool.getRelay()));
-
-                                    try {
-                                        joinClient.disconnect();
-                                    } catch (Exception e) {
-                                        // nothing to close
+                                    if(!JoinstrPublisher.publish(identity, pool.getRelay(), encrypted_event)) {
+                                        javafx.application.Platform.runLater(() ->
+                                                AppServices.showErrorDialog("Join Request Not Sent",
+                                                        JoinstrTransport.NOT_READY));
+                                        return;
                                     }
 
                                     Logger.getLogger(JoinstrPoolList.class.getName())

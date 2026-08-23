@@ -182,7 +182,7 @@ public class CoinjoinHandler {
                 nip04.setEvent(outputEvent);
                 nip04.sign();
 
-                publish(nip04, poolIdentity);
+                publish(outputEvent, poolIdentity);
 
                 Long createdAt = outputEvent.getCreatedAt();
                 recordOutput(address, createdAt == null ? Instant.now().getEpochSecond() : createdAt);
@@ -572,7 +572,7 @@ public class CoinjoinHandler {
             nip04.setEvent(inputEvent);
             nip04.sign();
 
-            publish(nip04, poolIdentity);
+            publish(inputEvent, poolIdentity);
 
             logger.info("Signed input sent to pool");
         } catch (Exception e) {
@@ -853,31 +853,17 @@ public class CoinjoinHandler {
             nip04.setEvent(event);
             nip04.sign();
 
-            publish(nip04, poolIdentity);
-            return true;
+            return JoinstrPublisher.publish(poolIdentity, relay, event);
         } catch (Exception e) {
             logger.severe("Failed to publish a pool message: " + e.getMessage());
             return false;
         }
     }
 
-    /** Send on a connection of its own, so this publish cannot disturb our subscription. */
-    private void publish(NIP04 nip04, Identity as) throws Exception {
-        Client client = new Client();
-        try {
-            DefaultRequestContext context = new DefaultRequestContext();
-            context.setPrivateKey(as.getPrivateKey().getRawData());
-            context.setRelays(new java.util.LinkedHashMap<>(Map.of("default", relay)));
-            context.setProxy(JoinstrTransport.proxy());
-            client.connect(context);
-
-            nip04.send(Map.of("default", relay));
-        } finally {
-            try {
-                client.disconnect();
-            } catch (Exception e) {
-                logger.fine("Error closing a publish connection: " + e.getMessage());
-            }
+    /** Send on a connection of its own, keeping the proxy and leaving our subscription alone. */
+    private void publish(GenericEvent signedEvent, Identity as) {
+        if (!JoinstrPublisher.publish(as, relay, signedEvent)) {
+            throw new IllegalStateException("could not publish to the pool");
         }
     }
 
