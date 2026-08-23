@@ -41,6 +41,51 @@ public final class JoinstrTransport {
      * This is handed to each nostr connection rather than set as a JVM wide system property, so
      * unrelated Sparrow traffic is unaffected.
      */
+    /**
+     * Whether a relay is on this machine.
+     *
+     * A loopback address cannot be reached through Tor, so forcing the proxy makes a local relay
+     * unusable. Nothing leaves the machine for one, so there is no traffic to hide.
+     */
+    public static boolean isLoopback(String relay) {
+        if (relay == null) {
+            return false;
+        }
+
+        try {
+            String host = java.net.URI.create(relay.trim()).getHost();
+            if (host == null) {
+                return false;
+            }
+            host = host.toLowerCase(java.util.Locale.ROOT);
+            return host.equals("127.0.0.1") || host.equals("localhost") || host.equals("::1")
+                    || host.equals("[::1]");
+        } catch (Exception e) {
+            return false;
+        }
+    }
+
+    /** The proxy for a given relay, or null when it needs none. */
+    public static Proxy proxy(String relay) {
+        if (isLoopback(relay)) {
+            return null;
+        }
+        return proxy();
+    }
+
+    /** Whether joinstr may talk to this relay at all. A local one needs no tor. */
+    public static boolean isReadyFor(String relay) {
+        return isLoopback(relay) || isReady();
+    }
+
+    /** Take a fresh circuit unless the relay is local, in which case there is none to take. */
+    public static boolean newCircuitFor(String relay) {
+        if (isLoopback(relay)) {
+            return true;
+        }
+        return newCircuit();
+    }
+
     public static Proxy proxy() {
         if (directForTesting) {
             return null;
