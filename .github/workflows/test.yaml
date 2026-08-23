@@ -4,7 +4,7 @@ on:
   pull_request:
   push:
     branches:
-      - main
+      - master
 
 permissions:
   contents: read
@@ -25,6 +25,26 @@ jobs:
         run: ./gradlew -v
       - name: Run tests
         run: ./gradlew -Djava.awt.headless=true test
+      - name: Set up Python for the test relay
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Install the test relay dependency
+        run: pip install 'websockets>=12,<13'
+      - name: Start a local nostr relay
+        run: |
+          python3 .github/scripts/nostr-relay.py 7777 &
+          for i in $(seq 1 20); do
+            if python3 -c "import socket,sys; s=socket.create_connection(('127.0.0.1',7777),0.5); s.close()" 2>/dev/null; then
+              echo "relay is up"; exit 0
+            fi
+            sleep 1
+          done
+          echo "relay did not start"; exit 1
+      - name: Run the multi peer integration tests
+        env:
+          JOINSTR_IT: '1'
+        run: ./gradlew -Djava.awt.headless=true :test --tests '*IT' --rerun-tasks
       - name: Upload test report
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
