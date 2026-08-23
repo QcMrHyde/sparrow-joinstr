@@ -59,10 +59,6 @@ public class NostrPublisher implements AutoCloseable {
 
         Identity poolIdentity;
         try {
-            if (!JoinstrTransport.newCircuit()) {
-                AppServices.showErrorDialog("Tor Not Running", JoinstrTransport.NOT_READY);
-                return null;
-            }
 
             poolIdentity = Identity.generateRandomIdentity();
             poolPrivateKey = poolIdentity.getPrivateKey().toString();
@@ -75,7 +71,6 @@ public class NostrPublisher implements AutoCloseable {
             String network = com.sparrowwallet.drongo.Network.get().getName();
 
             NIP01 nip01 = new NIP01(poolIdentity);
-            Client publisher = new Client();
 
             GenericEvent event = buildPoolEvent(poolIdentity, poolId, network, denomination, peers, timeout,
                     relayUrl, feeRate);
@@ -83,20 +78,10 @@ public class NostrPublisher implements AutoCloseable {
             nip01.setEvent(event);
             nip01.sign();
 
-            {
-                DefaultRequestContext context = new DefaultRequestContext();
-                context.setPrivateKey(poolIdentity.getPrivateKey().getRawData());
-                context.setRelays(relays);
-                context.setProxy(JoinstrTransport.proxy());
-                publisher.connect(context);
-            }
 
-            nip01.send(relays);
-
-            try {
-                publisher.disconnect();
-            } catch (Exception e) {
-                logger.fine("Error closing the announcement connection: " + e.getMessage());
+            if (!JoinstrPublisher.publish(poolIdentity, relayUrl, event)) {
+                AppServices.showErrorDialog("Pool Not Created", JoinstrTransport.NOT_READY);
+                return null;
             }
 
             logger.info("Event ID: " + event.getId());
