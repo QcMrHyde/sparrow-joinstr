@@ -1,5 +1,6 @@
 package com.sparrowwallet.sparrow.joinstr.control;
 
+import com.sparrowwallet.sparrow.AppServices;
 import com.sparrowwallet.sparrow.Theme;
 import com.sparrowwallet.sparrow.io.Config;
 import com.sparrowwallet.sparrow.joinstr.JoinstrPool;
@@ -23,7 +24,7 @@ public class JoinstrInfoPane extends VBox {
 
     public JoinstrInfoPane() {
         if(Config.get().getTheme() == Theme.DARK) {
-            getStylesheets().add(getClass().getResource("../../darktheme.css").toExternalForm());
+            getStylesheets().add(AppServices.class.getResource("darktheme.css").toExternalForm());
         }
         getStyleClass().add("joinstr-infopane");
         setSpacing(10);
